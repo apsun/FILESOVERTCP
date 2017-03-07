@@ -146,7 +146,7 @@ init_header(file_header_t *header, int filefd, const char *input_path)
         printe("Failed to get file name\n");
         return false;
     }
-    header->name_len = (uint16_t)name_len;
+    header->name_len = (uint16_t)name_len + 1;
     return true;
 }
 
