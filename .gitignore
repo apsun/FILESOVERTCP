@@ -1,0 +1,7 @@
+# Binary objects
+*.o
+ftcp
+
+# Garbage
+.DS_Store
+Thumbs.db
