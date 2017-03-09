@@ -74,7 +74,7 @@ cmd_read_request_header(int fd, uint32_t *op)
 
     /* Check opcode */
     if (!is_valid_op(op_tmp)) {
-        printe("Expected CMD_OP_*, got 0x%08x\n", op);
+        printe("Expected CMD_OP_*, got 0x%08x\n", op_tmp);
         return false;
     }
 
@@ -112,13 +112,13 @@ cmd_read_response_header(int fd, uint32_t *op, uint32_t *err)
 
     /* Check opcode */
     if (!is_valid_op(op_tmp)) {
-        printe("Expected CMD_OP_*, got 0x%08x\n", op);
+        printe("Expected CMD_OP_*, got 0x%08x\n", op_tmp);
         return false;
     }
 
     /* Check error code */
     if (!is_valid_err(err_tmp)) {
-        printe("Expected CMD_ERR_*, got 0x%08x\n", err);
+        printe("Expected CMD_ERR_*, got 0x%08x\n", err_tmp);
         return false;
     }
 
