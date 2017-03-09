@@ -81,9 +81,11 @@
  *   IF (CMD_ERR_OK)
  *     Bytes 12~15: Number of peers
  *     Bytes 16~19: IPv4 address of peer #0
- *     Bytes 20~23: IPv4 address of peer #1
+ *     Bytes 20~21: Server port of peer #0
+ *     Bytes 22~25: IPv4 address of peer #1
+ *     Bytes 26~27: Server port of peer #1
  *     Bytes 24~?: ... and so on
- #   ENDIF
+ *   ENDIF
  */
 #define CMD_OP_GET_PEER_LIST 0x52454550
 
@@ -123,13 +125,13 @@
 #define CMD_OP_GET_BLOCK_DATA 0x41544144
 
 /**
- * Convenience wrapper for write_all().
+ * Convenience wrapper for send_all().
  */
 bool
 cmd_write(int fd, const void *buf, size_t count);
 
 /**
- * Convenience wrapper for read_all().
+ * Convenience wrapper for recv_all().
  */
 bool
 cmd_read(int fd, void *buf, size_t count);

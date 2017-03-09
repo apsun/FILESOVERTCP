@@ -1,4 +1,5 @@
 #include "server.h"
+#include "client.h"
 #include "util.h"
 #include <stdio.h>
 #include <stdint.h>
@@ -23,9 +24,9 @@ main(int argc, char **argv)
 
     const char *mode = argv[1];
     if (strcmp(mode, "server") == 0) {
-        return server_loop(8888);
+        return server_run(8888);
     } else if (strcmp(mode, "client") == 0) {
-        return 1; /* TODO */
+        return client_run();
     } else {
         return usage(argv[0]);
     }

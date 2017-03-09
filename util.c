@@ -3,6 +3,8 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 
 void
 printe(const char *fmt, ...)
@@ -12,6 +14,41 @@ printe(const char *fmt, ...)
     vfprintf(stderr, fmt, args);
     va_end(args);
     fflush(stderr);
+}
+
+bool
+send_all(int sockfd, const void *buf, size_t count)
+{
+    const char *bufc = buf;
+    size_t total = 0;
+    while (total < count) {
+        ssize_t num = send(sockfd, bufc + total, count - total, MSG_NOSIGNAL);
+        if (num < 0) {
+            perror("Write failed");
+            return false;
+        }
+        total += num;
+    }
+    return true;
+}
+
+bool
+recv_all(int sockfd, void *buf, size_t count)
+{
+    char *bufc = buf;
+    size_t total = 0;
+    while (total < count) {
+        ssize_t num = recv(sockfd, bufc + total, count - total, MSG_WAITALL);
+        if (num < 0) {
+            perror("Read failed");
+            return false;
+        } else if (num == 0) {
+            printe("EOF reached before count\n");
+            return false;
+        }
+        total += num;
+    }
+    return true;
 }
 
 bool
@@ -53,6 +90,10 @@ bool
 write_block(int fd, const void *buf, size_t count, off_t file_offset)
 {
     /* TODO */
+    (void)fd;
+    (void)buf;
+    (void)count;
+    (void)file_offset;
     return false;
 }
 
@@ -60,6 +101,10 @@ bool
 read_block(int fd, void *buf, size_t count, off_t file_offset)
 {
     /* TODO */
+    (void)fd;
+    (void)buf;
+    (void)count;
+    (void)file_offset;
     return false;
 }
 

@@ -4,9 +4,9 @@
 #include <stdint.h>
 
 /**
- * Runs the main server loop, listening  on the specified port.
+ * Starts the main server thread, listening on the specified port.
  */
 int
-server_loop(uint16_t port);
+server_run(uint16_t port);
 
 #endif

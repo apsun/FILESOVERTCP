@@ -12,6 +12,19 @@ void
 printe(const char *fmt, ...);
 
 /**
+ * Like write_all(), but doesn't cause a SIGPIPE when
+ * writing to broken pipes. Only works on socket files.
+ */
+bool
+send_all(int sockfd, const void *buf, size_t count);
+
+/**
+ * Like read_all(), but only works on socket files.
+ */
+bool
+recv_all(int sockfd, void *buf, size_t count);
+
+/**
  * Writes count bytes from buf to the specified file.
  * Only returns once count bytes have been written, or
  * a write fails.

@@ -67,13 +67,13 @@ is_valid_err(uint32_t err)
 bool
 cmd_write(int fd, const void *buf, size_t count)
 {
-    return write_all(fd, buf, count);
+    return send_all(fd, buf, count);
 }
 
 bool
 cmd_read(int fd, void *buf, size_t count)
 {
-    return read_all(fd, buf, count);
+    return recv_all(fd, buf, count);
 }
 
 bool

@@ -16,7 +16,12 @@
 #include <pthread.h>
 
 typedef struct {
+    uint16_t port;
+} server_arg_t;
+
+typedef struct {
     int asockfd;
+    uint32_t client_ip;
     /* TODO: More stuff here... */
 } server_state_t;
 
@@ -106,7 +111,11 @@ server_handle_get_peer_list(server_state_t *state)
     /* Write each peer's IP address */
     for (uint32_t i = 0; i < num_peers; ++i) {
         uint32_t peer_ip = 0; /* TODO */
+        uint16_t peer_port = 0;
         if (!cmd_write(fd, &peer_ip, sizeof(peer_ip))) {
+            return false;
+        }
+        if (!cmd_write(fd, &peer_port, sizeof(peer_port))) {
             return false;
         }
     }
@@ -137,6 +146,7 @@ server_handle_get_block_list(server_state_t *state)
         return false;
     }
 
+    /* Write the size of the bitmap */
     uint32_t num_blocks = 0; /* TODO */
     if (!cmd_write(fd, &num_blocks, sizeof(num_blocks))) {
         return false;
@@ -152,9 +162,33 @@ server_handle_get_block_data(server_state_t *state)
 {
     const uint32_t op = CMD_OP_GET_BLOCK_DATA;
     int fd = state->asockfd;
-    
-    /* TODO */
-    return false;
+
+    /* Read file ID */
+    file_id_t file_id;
+    if (!cmd_read(fd, &file_id, sizeof(file_id))) {
+        cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
+        return false;
+    }
+
+    /* Check that we know about this file */
+    if (0) { /* TODO */
+        cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
+    }
+
+    /* Write response header */
+    if (!cmd_write_response_header(fd, op, CMD_ERR_OK)) {
+        return false;
+    }
+
+    /* Write block length */
+    uint32_t block_len = 0;
+    if (!cmd_write(fd, &block_len, sizeof(block_len))) {
+        return false;
+    }
+
+    /* TODO: Write block data */
+
+    return true;
 }
 
 static bool
@@ -218,11 +252,11 @@ cleanup:
     return NULL;
 }
 
-int
-server_loop(uint16_t port)
+static void *
+server_thread(void *arg)
 {
     int sockfd = -1;
-    int ret = 1;
+    uint16_t port = (uint16_t)(size_t)arg;
 
     /* Create TCP socket */
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -264,6 +298,7 @@ server_loop(uint16_t port)
         /* Initialize worker thread args */
         server_state_t *arg = malloc(sizeof(server_state_t));
         arg->asockfd = asockfd;
+        arg->client_ip = ntohl(caddr.sin_addr.s_addr);
 
         /* Create worker thread */
         pthread_t thread;
@@ -280,12 +315,32 @@ server_loop(uint16_t port)
         }
     }
 
-    /* Not sure how we're ever going to reach this... */
-    ret = 0;
-
 cleanup:
+    printf("Cleaning up server thread\n");
     if (sockfd >= 0) {
         close(sockfd);
     }
-    return ret;
+    return NULL;
+}
+
+int
+server_run(uint16_t port)
+{
+    pthread_t thread;
+    void *arg = (void *)(size_t)port;
+
+    if (pthread_create(&thread, NULL, server_thread, arg) < 0) {
+        perror("Failed to create server thread");
+        return 1;
+    }
+
+    pthread_join(thread, NULL);
+    return 0;
+    
+    if (pthread_detach(thread) < 0) {
+        perror("Failed to detach server thread");
+        return 1;
+    }
+
+    return 0;
 }
