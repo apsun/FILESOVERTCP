@@ -28,7 +28,7 @@ server_handle_get_file_meta(server_state_t *state)
     }
 
     /* Validate file name length */
-    if (file_name_len > MAX_FILE_NAME_LEN) {
+    if (file_name_len == 0 || file_name_len > MAX_FILE_NAME_LEN) {
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
         return false;
     }
@@ -47,7 +47,7 @@ server_handle_get_file_meta(server_state_t *state)
     }
 
     /* Check for embedded NUL characters */
-    if (strlen(file_name) + 1 != file_name_len) {
+    if (strlen(file_name) != file_name_len - 1) {
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
         return false;
     }
@@ -111,6 +111,18 @@ server_worker(void *arg)
 {
     server_state_t *state = arg;
 
+    /* Read and check the magic bytes */
+    uint32_t magic;
+    if (!cmd_read(state->asockfd, &magic, sizeof(magic))) {
+        printe("Failed to read FTCP_MAGIC\n");
+        goto cleanup;
+    }
+
+    if (magic != FTCP_MAGIC) {
+        printe("Magic mismatch, expected FTCP_MAGIC, got 0x%08x\n", magic);
+        goto cleanup;
+    }
+
     /* Main handling loop */
     while (true) {
         /* Read opcode from client */
@@ -125,7 +137,8 @@ server_worker(void *arg)
         }
     }
 
-    /* Cleanup */
+cleanup:
+    close(state->asockfd);
     free(state);
     return NULL;
 }
@@ -173,9 +186,12 @@ server_loop(uint16_t port)
         /* Connection successful! */
         printf("Got connection from %s:%d\n", inet_ntoa(caddr.sin_addr), ntohs(caddr.sin_port));
 
+        /* Initialize worker thread args */
+        server_state_t *arg = malloc(sizeof(server_state_t));
+        arg->asockfd = asockfd;
+
         /* Create worker thread */
         pthread_t thread;
-        server_state_t *arg = malloc(sizeof(server_state_t));
         if (pthread_create(&thread, NULL, server_worker, arg) < 0) {
             perror("Failed to create server worker thread");
             free(arg);
