@@ -115,7 +115,7 @@ server_worker(void *arg)
     while (true) {
         /* Read opcode from client */
         uint32_t op;
-        if (!read_cmd_request_header(state->asockfd, &op)) {
+        if (!cmd_read_request_header(state->asockfd, &op)) {
             break;
         }
 
