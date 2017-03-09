@@ -41,7 +41,7 @@ server_handle_get_file_meta(server_state_t *state)
 
     /* Read file name */
     char file_name[MAX_FILE_NAME_LEN];
-    if (!cmd_read(state->asockfd, file_name, sizeof(file_name))) {
+    if (!cmd_read(state->asockfd, file_name, file_name_len)) {
         cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
         return false;
     }
