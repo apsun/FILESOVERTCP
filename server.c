@@ -17,8 +17,8 @@ typedef struct {
 static bool
 server_handle_get_file_meta(server_state_t *state)
 {
+    const uint32_t op = CMD_OP_GET_FILE_META;
     int fd = state->asockfd;
-    uint32_t op = CMD_OP_GET_FILE_META;
 
     /* Read file name length */
     uint32_t file_name_len;
@@ -47,7 +47,7 @@ server_handle_get_file_meta(server_state_t *state)
     }
 
     /* Check for embedded NUL characters */
-    if (strlen(file_name) != file_name_len) {
+    if (strlen(file_name) + 1 != file_name_len) {
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
         return false;
     }
