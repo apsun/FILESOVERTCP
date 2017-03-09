@@ -1,8 +1,8 @@
-#include "block.h"
+#include "server.h"
 #include "util.h"
 #include "type.h"
-#include "peer.h"
 #include "cmd.h"
+#include "block.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -175,7 +175,7 @@ server_loop(uint16_t port)
 
         /* Create worker thread */
         pthread_t thread;
-        server_state_t *arg = malloc(sizeof(server_worker_arg_t));
+        server_state_t *arg = malloc(sizeof(server_state_t));
         if (pthread_create(&thread, NULL, server_worker, arg) < 0) {
             perror("Failed to create server worker thread");
             free(arg);

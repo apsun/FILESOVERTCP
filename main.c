@@ -1,8 +1,4 @@
-#include "block.h"
-#include "util.h"
-#include "type.h"
-#include "peer.h"
-#include "cmd.h"
+#include "server.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
