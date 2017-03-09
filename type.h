@@ -26,11 +26,11 @@
 #define MAX_NUM_BLOCKS 10000
 
 /**
- * 128-bit GUID structure
+ * File ID structure
  */
 typedef struct {
     char bytes[16];
-} guid_t;
+} file_id_t;
 
 /**
  * SHA-3-256 digest structure
@@ -51,7 +51,7 @@ typedef struct {
     /**
      * Unique identifier of the file.
      */
-    guid_t guid;
+    file_id_t id;
 
     /**
      * Length of the filename, including NUL terminator.

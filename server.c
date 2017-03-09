@@ -35,7 +35,7 @@ server_handle_get_file_meta(server_state_t *state)
 
     /* Validate file name length */
     if (file_name_len == 0 || file_name_len > MAX_FILE_NAME_LEN) {
-        cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
+        cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
         return false;
     }
 
@@ -77,20 +77,82 @@ server_handle_get_file_meta(server_state_t *state)
 static bool
 server_handle_get_peer_list(server_state_t *state)
 {
-    /* TODO */
-    return false;
+    const uint32_t op = CMD_OP_GET_PEER_LIST;
+    int fd = state->asockfd;
+
+    /* Read file ID */
+    file_id_t file_id;
+    if (!cmd_read(fd, &file_id, sizeof(file_id))) {
+        cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
+        return false;
+    }
+
+    /* Check that we know about this file */
+    if (0) { /* TODO */
+        cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
+    }
+
+    /* Write response header */
+    if (!cmd_write_response_header(fd, op, CMD_ERR_OK)) {
+        return false;
+    }
+
+    /* Write number of peers in the following list */
+    uint32_t num_peers = 0; /* TODO */
+    if (!cmd_write(fd, &num_peers, sizeof(num_peers))) {
+        return false;
+    }
+
+    /* Write each peer's IP address */
+    for (uint32_t i = 0; i < num_peers; ++i) {
+        uint32_t peer_ip = 0; /* TODO */
+        if (!cmd_write(fd, &peer_ip, sizeof(peer_ip))) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 static bool
 server_handle_get_block_list(server_state_t *state)
 {
-    /* TODO */
-    return false;
+    const uint32_t op = CMD_OP_GET_BLOCK_LIST;
+    int fd = state->asockfd;
+
+    /* Read file ID */
+    file_id_t file_id;
+    if (!cmd_read(fd, &file_id, sizeof(file_id))) {
+        cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
+        return false;
+    }
+
+    /* Check that we know about this file */
+    if (0) { /* TODO */
+        cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
+    }
+
+    /* Write response header */
+    if (!cmd_write_response_header(fd, op, CMD_ERR_OK)) {
+        return false;
+    }
+
+    uint32_t num_blocks = 0; /* TODO */
+    if (!cmd_write(fd, &num_blocks, sizeof(num_blocks))) {
+        return false;
+    }
+
+    /* TODO: Write block info */
+
+    return true;
 }
 
 static bool
 server_handle_get_block_data(server_state_t *state)
 {
+    const uint32_t op = CMD_OP_GET_BLOCK_DATA;
+    int fd = state->asockfd;
+    
     /* TODO */
     return false;
 }
