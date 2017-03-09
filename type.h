@@ -1,7 +1,6 @@
 #ifndef TYPE_H
 #define TYPE_H
 
-#include "block.h"
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -15,6 +14,16 @@
  * Maximum length of a file name, including the NUL terminator.
  */
 #define MAX_FILE_NAME_LEN 4096
+
+/**
+ * Minimum size of a block, in bytes. Must be a power of 2.
+ */
+#define MIN_BLOCK_SIZE 4096
+
+/**
+ * Maximum number of blocks to split a file into.
+ */
+#define MAX_NUM_BLOCKS 10000
 
 /**
  * 128-bit GUID structure

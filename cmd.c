@@ -5,6 +5,36 @@
 #include <stdio.h>
 #include <stdint.h>
 
+/**
+ * Client protocol:
+ *   send FTCP_MAGIC
+ *   recv FTCP_MAGIC
+ *   while (OK) {
+ *     send CMD_REQUEST
+ *     send CMD_OP_*
+ *     send arguments
+ *
+ *     recv CMD_RESPONSE
+ *     recv CMD_OP_*
+ *     recv CMD_ERR_*
+ *     recv data
+ *   }
+ *
+ * Server protocol:
+ *   recv FTCP_MAGIC
+ *   send FTCP_MAGIC
+ *   while (OK) {
+ *     recv CMD_REQUEST
+ *     recv CMD_OP_*
+ *     recv arguments
+ *
+ *     send CMD_RESPONSE
+ *     send CMD_OP_*
+ *     send CMD_ERR_*
+ *     send data
+ *   }
+ */
+
 static bool
 is_valid_op(uint32_t op)
 {
@@ -50,7 +80,7 @@ bool
 cmd_write_request_header(int fd, uint32_t op)
 {
     uint32_t buf[2] = {CMD_REQUEST, op};
-    return write_all(fd, buf, sizeof(buf));
+    return cmd_write(fd, buf, sizeof(buf));
 }
 
 bool
@@ -59,7 +89,7 @@ cmd_read_request_header(int fd, uint32_t *op)
     uint32_t buf[2];
 
     /* Read data */
-    if (!read_all(fd, buf, sizeof(buf))) {
+    if (!cmd_read(fd, buf, sizeof(buf))) {
         return false;
     }
 
@@ -87,7 +117,7 @@ bool
 cmd_write_response_header(int fd, uint32_t op, uint32_t err)
 {
     uint32_t buf[3] = {CMD_RESPONSE, op, err};
-    return write_all(fd, buf, sizeof(buf));
+    return cmd_write(fd, buf, sizeof(buf));
 }
 
 bool
@@ -96,7 +126,7 @@ cmd_read_response_header(int fd, uint32_t *op, uint32_t *err)
     uint32_t buf[3];
 
     /* Read data */
-    if (!read_all(fd, buf, sizeof(buf))) {
+    if (!cmd_read(fd, buf, sizeof(buf))) {
         return false;
     }
 

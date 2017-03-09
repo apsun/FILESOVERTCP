@@ -37,8 +37,11 @@ read_all(int fd, void *buf, size_t count)
     size_t total = 0;
     while (total < count) {
         ssize_t num = read(fd, bufc + total, count - total);
-        if (num <= 0) {
+        if (num < 0) {
             perror("Read failed");
+            return false;
+        } else if (num == 0) {
+            printe("EOF reached before count\n");
             return false;
         }
         total += num;

@@ -28,7 +28,7 @@ server_handle_get_file_meta(server_state_t *state)
 
     /* Read file name length */
     uint32_t file_name_len;
-    if (!cmd_read(state->asockfd, &file_name_len, sizeof(file_name_len))) {
+    if (!cmd_read(fd, &file_name_len, sizeof(file_name_len))) {
         cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
         return false;
     }
@@ -41,7 +41,7 @@ server_handle_get_file_meta(server_state_t *state)
 
     /* Read file name */
     char file_name[MAX_FILE_NAME_LEN];
-    if (!cmd_read(state->asockfd, file_name, file_name_len)) {
+    if (!cmd_read(fd, file_name, file_name_len)) {
         cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
         return false;
     }
@@ -129,6 +129,12 @@ server_worker(void *arg)
         goto cleanup;
     }
 
+    /* Respond with our own magic bytes */
+    if (!cmd_write(state->asockfd, &magic, sizeof(magic))) {
+        printe("Failed to write FTCP_MAGIC\n");
+        goto cleanup;
+    }
+
     /* Main handling loop */
     while (true) {
         /* Read opcode from client */
@@ -144,6 +150,7 @@ server_worker(void *arg)
     }
 
 cleanup:
+    printf("Cleaning up server worker\n");
     close(state->asockfd);
     free(state);
     return NULL;

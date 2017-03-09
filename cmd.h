@@ -53,6 +53,7 @@
 
 /**
  * Command to get file metadata.
+ * ASCII for 'META'.
  *
  * Request:
  *   Bytes 0~7: Request header
@@ -65,10 +66,11 @@
  *     Bytes 12~?: file_meta_t struct
  *   ENDIF
  */
-#define CMD_OP_GET_FILE_META 0x00000001
+#define CMD_OP_GET_FILE_META 0x4154454d
 
 /**
  * Command to get the server's peer list.
+ * ASCII for 'PEER'.
  *
  * Request:
  *   Bytes 0~7: Request header
@@ -83,10 +85,11 @@
  *     Bytes 24~?: ... and so on
  #   ENDIF
  */
-#define CMD_OP_GET_PEER_LIST 0x00000002
+#define CMD_OP_GET_PEER_LIST 0x52454550
 
 /**
  * Command to get the server's block info.
+ * ASCII for 'BLKS'.
  *
  * Request:
  *   Bytes 0~7: Request header
@@ -99,10 +102,11 @@
  *     Bytes 16~?: Block bitmap. Last byte has extra high bits padded with 0s.
  *   ENDIF
  */
-#define CMD_OP_GET_BLOCK_LIST 0x00000003
+#define CMD_OP_GET_BLOCK_LIST 0x534b4c42
 
 /**
  * Command to get the contents of a block.
+ * ASCII for 'DATA'.
  *
  * Request:
  *   Bytes 0~7: Request header
@@ -116,7 +120,7 @@
  *     Bytes 20~?: Block bytes
  *   ENDIF
  */
-#define CMD_OP_GET_BLOCK_DATA 0x00000004
+#define CMD_OP_GET_BLOCK_DATA 0x41544144
 
 /**
  * Convenience wrapper for write_all().

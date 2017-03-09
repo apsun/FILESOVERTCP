@@ -1,4 +1,5 @@
 #include "block.h"
+#include "type.h"
 
 uint64_t
 block_calculate_size(uint64_t file_size)
