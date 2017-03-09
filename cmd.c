@@ -106,7 +106,7 @@ cmd_read_response_header(int fd, uint32_t *op, uint32_t *err)
 
     /* Check response magic */
     if (magic != CMD_RESPONSE) {
-        printe("Expected CMD_RESPONSE, got 0x%08x\n", magic)
+        printe("Expected CMD_RESPONSE, got 0x%08x\n", magic);
         return false;
     }
 

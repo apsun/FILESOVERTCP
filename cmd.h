@@ -1,6 +1,9 @@
 #ifndef CMD_H
 #define CMD_H
 
+#include <stdbool.h>
+#include <stdint.h>
+
 /**
  * Magic bytes denoting a command request.
  * ASCII for 'RQST'.
@@ -113,6 +116,18 @@
  *   ENDIF
  */
 #define CMD_OP_GET_BLOCK_DATA 0x00000004
+
+/**
+ * Convenience wrapper for write_all().
+ */
+bool
+cmd_write(int fd, const void *buf, size_t count);
+
+/**
+ * Convenience wrapper for read_all().
+ */
+bool
+cmd_read(int fd, void *buf, size_t count);
 
 /**
  * Writes a request header to the specified file.

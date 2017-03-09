@@ -1,6 +1,7 @@
 #ifndef TYPE_H
 #define TYPE_H
 
+#include "block.h"
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>

@@ -32,7 +32,7 @@ read_all(int fd, void *buf, size_t count);
  * could be written, false otherwise.
  */
 bool
-write_block(int fd, const void *buf, size_t count, off_t file_offset)
+write_block(int fd, const void *buf, size_t count, off_t file_offset);
 
 /**
  * Reads count bytes from the specified file into buf
@@ -42,7 +42,7 @@ write_block(int fd, const void *buf, size_t count, off_t file_offset)
  * with 0s and true is returned.
  */
 bool
-read_block(int fd, void *buf, size_t count, off_t file_offset)
+read_block(int fd, void *buf, size_t count, off_t file_offset);
 
 /**
  * Similar to strncpy. Returns true iff all chars (including
