@@ -1,3 +1,6 @@
+#ifndef BLOCK_H
+#define BLOCK_H
+
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -17,4 +20,6 @@
  * to transfer a file of the specified size.
  */
 uint64_t
-calculate_block_size(uint64_t file_size);
+block_calculate_size(uint64_t file_size);
+
+#endif

@@ -1,3 +1,6 @@
+#ifndef UTIL_H
+#define UTIL_H
+
 #include <stdlib.h>
 #include <stdbool.h>
 
@@ -57,3 +60,5 @@ copy_string(char *dest, const char *src, size_t *length);
  */
 bool
 get_file_name(char *out_name, const char *path, size_t *length);
+
+#endif

@@ -1,7 +1,7 @@
 #include "block.h"
 
 uint64_t
-calculate_block_size(uint64_t file_size)
+block_calculate_size(uint64_t file_size)
 {
     uint64_t block_size = MIN_BLOCK_SIZE;
     while (file_size / block_size > MAX_NUM_BLOCKS) {

@@ -1,3 +1,6 @@
+#ifndef CMD_H
+#define CMD_H
+
 /**
  * Magic bytes denoting a command request.
  * ASCII for 'RQST'.
@@ -9,7 +12,7 @@
 #define CMD_REQUEST 0x54535152
 
 /**
- * Magic number denoting a command response.
+ * Magic bytes denoting a command response.
  * ASCII for 'RESP'.
  *
  * All responses start with the following header:
@@ -25,14 +28,24 @@
 #define CMD_ERR_OK 0x00000000
 
 /**
+ * Generic error occurred.
+ */
+#define CMD_ERR_UNKNOWN 0x80000000
+
+/**
+ * Request was malformed.
+ */
+#define CMD_ERR_MALFORMED 0x80000001
+
+/**
  * File was not found (invalid GUID or peer doesn't have it).
  */
-#define CMD_ERR_FILE_NOT_FOUND 0x00000001
+#define CMD_ERR_FILE_NOT_FOUND 0x80000002
 
 /**
  * Block was not found (invalid index or peer doesn't have it).
  */
-#define CMD_ERR_BLOCK_NOT_FOUND 0x00000002
+#define CMD_ERR_BLOCK_NOT_FOUND 0x80000003
 
 /**
  * Command to get file metadata.
@@ -100,3 +113,29 @@
  *   ENDIF
  */
 #define CMD_OP_GET_BLOCK_DATA 0x00000004
+
+/**
+ * Writes a request header to the specified file.
+ */
+bool
+cmd_write_request_header(int fd, uint32_t op);
+
+/**
+ * Reads a request header from the specified file.
+ */
+bool
+cmd_read_request_header(int fd, uint32_t *op);
+
+/**
+ * Writes a response header to the specified file.
+ */
+bool
+cmd_write_response_header(int fd, uint32_t op, uint32_t err);
+
+/**
+ * Reads a response header from the specified file.
+ */
+bool
+cmd_read_response_header(int fd, uint32_t *op, uint32_t *err);
+
+#endif

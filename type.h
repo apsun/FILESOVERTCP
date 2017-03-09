@@ -1,3 +1,6 @@
+#ifndef TYPE_H
+#define TYPE_H
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -77,3 +80,5 @@ typedef struct {
      */
     sha256_t block_hashes[MAX_NUM_BLOCKS];
 } file_meta_t;
+
+#endif
