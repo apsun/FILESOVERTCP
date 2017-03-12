@@ -7,6 +7,27 @@
 #include <string.h>
 #include <stdbool.h>
 
+//GLOBAL DECLARATIONS change to pointers.
+
+/**
+ * Array holding meta information for all files we have or are getting.
+ */
+file_meta_t filelist[MAX_NUM_FILES];
+/**
+ * Array holding meta information of blocks for all files we have or are getting.
+ */
+char blocklist[MAX_FILES][MAX_NUM_BLOCKS];
+/**
+ * Represents how many files we have or are getting.
+ */
+int files = 0;
+/**
+ * Array of fd for files we have or are getting.
+ */
+int fdList[MAX_FILES];
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+
 static int
 usage(const char *name)
 {

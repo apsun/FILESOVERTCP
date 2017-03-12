@@ -63,9 +63,12 @@ server_handle_get_file_meta(server_state_t *state)
         return false;
     }
 
-    /* TODO: Get file info here */
-    file_meta_t meta;
-
+    /* Checks to see if we have the file */
+    file_meta_t meta = get_file_meta_by_filename(file_name);
+    if (meta == NULL) {
+        cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
+        return false;
+    }
     /* Write response header */
     if (!cmd_write_response_header(fd, op, CMD_ERR_OK)) {
         return false;
@@ -93,7 +96,10 @@ server_handle_get_peer_list(server_state_t *state)
     }
 
     /* Check that we know about this file */
-    if (0) { /* TODO */
+    int index = -1;
+    int filefd = -1
+    file_meta_t meta = get_file_meta_by_file_id(file_id_t file_id, &index, &filefd);
+    if (meta == NULL) {
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
     }
 
@@ -137,7 +143,10 @@ server_handle_get_block_list(server_state_t *state)
     }
 
     /* Check that we know about this file */
-    if (0) { /* TODO */
+    int index = -1;
+    int filefd = -1;
+    file_meta_t meta = get_file_meta_by_file_id(file_id_t file_id, &index, &filefd);
+    if (meta == NULL) {
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
     }
 
@@ -146,7 +155,7 @@ server_handle_get_block_list(server_state_t *state)
         return false;
     }
 
-    /* Write the size of the bitmap */
+    /* Write the size of the bitmap */ 
     uint32_t num_blocks = 0; /* TODO */
     if (!cmd_write(fd, &num_blocks, sizeof(num_blocks))) {
         return false;
@@ -171,22 +180,46 @@ server_handle_get_block_data(server_state_t *state)
     }
 
     /* Check that we know about this file */
-    if (0) { /* TODO */
+    int file_index = -1;
+    int filefd = -1;
+    file_meta_t meta = get_file_meta_by_file_id(file_id_t file_id, &file_index, &filefd);
+    if (meta == NULL) {
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
     }
 
+    /* Read block index */
+    uint64_t block_index = -1;
+    if (!cmd_read(fd, &block_index, sizeof(block_index))) {
+        cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
+        return false;
+    }
+    if (!have_block(fileindex, block_index)) {
+        cmd_write_response_header(fd, op, CMD_ERR_BLOCK_NOT_FOUND);
+    }
     /* Write response header */
     if (!cmd_write_response_header(fd, op, CMD_ERR_OK)) {
         return false;
     }
 
     /* Write block length */
-    uint32_t block_len = 0;
+    uint32_t block_len = meta.block_size;
     if (!cmd_write(fd, &block_len, sizeof(block_len))) {
         return false;
     }
 
-    /* TODO: Write block data */
+    /* Get the block data */
+    char * blockdata = malloc(meta.block_size);
+    off_t offset = block_index * meta.block_size;
+    if(!read_block(filefd, blockdata, meta.block_size, offset))
+    {
+        return false; //is this fine.
+    }
+
+    /* Write the block data */
+    if (!cmd_write(fd, &blockdata, meta.block_size)) {
+        return false;
+    }
+
 
     return true;
 }

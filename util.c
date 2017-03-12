@@ -6,6 +6,14 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+
+extern pthread_mutex_t lock;
+extern int files;
+extern file_meta_t filelist[MAX_NUM_FILES];
+extern int fdList[MAX_FILES];
+extern char blocklist[MAX_FILES][MAX_NUM_BLOCKS];
+
+
 void
 printe(const char *fmt, ...)
 {
@@ -89,24 +97,36 @@ read_all(int fd, void *buf, size_t count)
 bool
 write_block(int fd, const void *buf, size_t count, off_t file_offset)
 {
-    /* TODO */
-    (void)fd;
-    (void)buf;
-    (void)count;
-    (void)file_offset;
-    return false;
+    const char *bufc = buf;
+    size_t total = 0;
+    while (total < count) {
+        ssize_t num = pwrite(fd, bufc + total, count - total, file_offset);
+        if (num < 0) {
+            perror("Write failed");
+            return false;
+        }
+        total += num;
+    }
+    return true;
 }
 
 bool
 read_block(int fd, void *buf, size_t count, off_t file_offset)
 {
-    /* TODO */
-    (void)fd;
-    (void)buf;
-    (void)count;
-    (void)file_offset;
-    return false;
-}
+    char *bufc = buf;
+    size_t total = 0;
+    while (total < count) {
+        ssize_t num = pread(fd, bufc + total, count - total, file_offset);
+        if (num < 0) {
+            perror("Read failed");
+            return false;
+        } else if (num == 0) {
+            memset(buf + total, 0, count - total);
+            return true;
+        }
+        total += num;
+    }
+    return true;
 
 bool
 copy_string(char *dest, const char *src, size_t *length)
@@ -130,4 +150,64 @@ get_file_name(char *out_name, const char *path, size_t *length)
     } else {
         return copy_string(out_name, s + 1, length);
     }
+}
+
+file_meta_t
+get_file_meta_by_filename(char * filename)
+{
+    pthread_mutex_lock(&lock);
+    for(int i = 0; i < files; i++)
+    {
+        file_meta_t temp = filelist[i];
+        if(strcmp(t.file_name, filename) == 0)
+        {
+            pthread_mutex_unlock(&m);
+            return temp;
+        }
+    }
+    pthread_mutex_unlock(&m);
+    return NULL;
+}
+
+file_meta_t
+get_file_meta_by_file_id(file_id_t file_id, int * index, int * fd)
+{
+    pthread_mutex_lock(&lock);
+    for(int i = 0; i < files; i++)
+    {
+        file_meta_t temp = filelist[i];
+        if(file_id_compare(file_id, temp.id)) //can probably do this with memcmp but this should be more safe.
+        {
+            *fd = fdList[i];
+            pthread_mutex_unlock(&m);
+            *index = i;
+            return temp;
+        }
+    }
+    pthread_mutex_unlock(&m);
+    return NULL;
+}
+bool
+file_id_compare(file_id_t file_id1, file_id_t file_id2)
+{
+    for(int i = 0; i < 16; i++)
+    {
+        if(file_id1.bytes[i] != file_id2.bytes[i])
+        {
+            return false;
+        }
+    }
+    return true;
+}
+bool
+have_block(int file_index, uint64_t block_index)
+{
+    pthread_mutex_lock(&lock);
+    if(blocklist[file_index][block_index] == 2)
+    {
+        pthread_mutex_unlock(&lock);
+        return false;
+    }
+    pthread_mutex_unlock(&lock);
+    return true;
 }
