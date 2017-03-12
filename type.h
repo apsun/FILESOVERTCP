@@ -13,7 +13,7 @@
 /**
  * Maximum length of a file name, including the NUL terminator.
  */
-#define MAX_FILE_NAME_LEN 4096
+#define MAX_FILE_NAME_LEN 256
 
 /**
  * Minimum size of a block, in bytes. Must be a power of 2.

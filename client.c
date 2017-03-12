@@ -127,8 +127,8 @@ cleanup:
     return NULL;
 }
 
-int
-client_run(void)
+void *
+client_run(void * arg)
 {
     pthread_t thread;
     client_state_t *state = malloc(sizeof(client_state_t));

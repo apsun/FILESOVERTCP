@@ -185,6 +185,7 @@ server_handle_get_block_data(server_state_t *state)
     file_meta_t meta = get_file_meta_by_file_id(file_id_t file_id, &file_index, &filefd);
     if (meta == NULL) {
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
+        return false;
     }
 
     /* Read block index */
@@ -196,6 +197,16 @@ server_handle_get_block_data(server_state_t *state)
     if (!have_block(fileindex, block_index)) {
         cmd_write_response_header(fd, op, CMD_ERR_BLOCK_NOT_FOUND);
     }
+
+    /* Get the block data */
+    char * blockdata = malloc(meta.block_size);
+    off_t offset = block_index * meta.block_size;
+    if(!read_block(filefd, blockdata, meta.block_size, offset))
+    {
+        cmd_write_response_header(fd, op, CMD_ERR_BLOCK_NOT_FOUND);
+        return false;
+    }
+
     /* Write response header */
     if (!cmd_write_response_header(fd, op, CMD_ERR_OK)) {
         return false;
@@ -207,19 +218,11 @@ server_handle_get_block_data(server_state_t *state)
         return false;
     }
 
-    /* Get the block data */
-    char * blockdata = malloc(meta.block_size);
-    off_t offset = block_index * meta.block_size;
-    if(!read_block(filefd, blockdata, meta.block_size, offset))
-    {
-        return false; //is this fine.
-    }
-
     /* Write the block data */
     if (!cmd_write(fd, &blockdata, meta.block_size)) {
         return false;
     }
-
+    free(blockdata);
 
     return true;
 }
