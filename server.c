@@ -67,8 +67,8 @@ server_handle_get_file_meta(server_state_t *state)
     }
 
     /* Checks to see if we have the file */
-    file_meta_t meta = get_file_meta_by_filename(file_name);
-    if (meta == NULL) {
+    file_meta_t meta;
+    if (!get_file_meta_by_filename(file_name, &meta)) {
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
         return false;
     }
@@ -101,8 +101,8 @@ server_handle_get_peer_list(server_state_t *state)
     /* Check that we know about this file */
     int index = -1;
     int filefd = -1
-    file_meta_t meta = get_file_meta_by_file_id(file_id_t file_id, &index, &filefd);
-    if (meta == NULL) {
+    file_meta_t meta;
+    if (!get_file_meta_by_file_id(file_id_t file_id, &index, &filefd, &meta)) {
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
     }
 
@@ -148,8 +148,8 @@ server_handle_get_block_list(server_state_t *state)
     /* Check that we know about this file */
     int index = -1;
     int filefd = -1;
-    file_meta_t meta = get_file_meta_by_file_id(file_id_t file_id, &index, &filefd);
-    if (meta == NULL) {
+    file_meta_t meta; 
+    if (!get_file_meta_by_file_id(file_id_t file_id, &index, &filefd)) {
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
     }
 
@@ -209,8 +209,8 @@ server_handle_get_block_data(server_state_t *state)
     /* Check that we know about this file */
     int file_index = -1;
     int filefd = -1;
-    file_meta_t meta = get_file_meta_by_file_id(file_id_t file_id, &file_index, &filefd);
-    if (meta == NULL) {
+    file_meta_t meta;
+    if (!get_file_meta_by_file_id(file_id_t file_id, &file_index, &filefd, &meta)) {
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
         return false;
     }

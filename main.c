@@ -6,6 +6,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include "type.h"
+#include <pthread.h>
+#include <dirent.h>
+#include "block.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 
 //GLOBAL DECLARATIONS change to pointers.
 
@@ -16,7 +24,7 @@ file_meta_t filelist[MAX_NUM_FILES];
 /**
  * Array holding meta information of blocks for all files we have or are getting.
  */
-char blocklist[MAX_FILES][MAX_NUM_BLOCKS];
+char blocklist[MAX_NUM_FILES][MAX_NUM_BLOCKS];
 /**
  * Represents how many files we have or are getting.
  */
@@ -24,7 +32,7 @@ int files = 0;
 /**
  * Array of fd for files we have or are getting.
  */
-int fdList[MAX_FILES];
+int fdList[MAX_NUM_FILES];
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 
@@ -54,7 +62,7 @@ main(int argc, char **argv)
         return -1;
     }
 
-    while(entry = readdir(dp))
+    while((entry = readdir(dp)))
     {
         char pathname[4096]; //the maximum path length on linux
         sprintf( pathname, "%s/%s", dirName, entry->d_name );
@@ -65,29 +73,29 @@ main(int argc, char **argv)
         filelist[files].file_name_len = strlen(entry->d_name) + 1;
         filelist[files].file_size = buf.st_size;
         filelist[files].block_size = block_calculate_size(filelist[files].file_size);
-        filelist[files].block_count = (filelist[files].file_size % filelist[files].block_size) ? (filelist[files].file_size / filelist[files].block_size) + 1 : (filelist[files].file_size / filelist[files].block_size)
+        filelist[files].block_count = (filelist[files].file_size % filelist[files].block_size) ? (filelist[files].file_size / filelist[files].block_size) + 1 : (filelist[files].file_size / filelist[files].block_size);
         //filelist[files].file_hash = ?
         //filelist[files].id = ?
-        for(int i = 0; i < filelist[files].file_name_len; i++)
+        for(size_t i = 0; i < filelist[files].file_name_len; i++)
         {
             filelist[files].file_name[i] = entry->d_name[i];
         }
-        for(int i = 0; i < filelist[files].block_count; i++)
+        for(size_t i = 0; i < filelist[files].block_count; i++)
         {
             //filelist[files].block_hashes[i] = ?;
             blocklist[files][i] = 2; //we have everthing
         }
-        files++
+        files++;
     }
     pthread_t thread1;
     pthread_t thread2;
     void *arg = (void *)(size_t)port;
 
-    if (pthread_create(&thread1, NULL, server_thread, arg) < 0) {
+    if (pthread_create(&thread1, NULL, &server_thread, arg) < 0) {
         perror("Failed to create server thread");
         return 1;
     }
-    if (pthread_create(&thread2, NULL, client_run, NULL) < 0) { //need to modify cleint run so it takes stdin for filename, ip, and port
+    if (pthread_create(&thread2, NULL, &client_run, NULL) < 0) { //need to modify cleint run so it takes stdin for filename, ip, and port
         perror("Failed to create client thread");
         return 1;
     }

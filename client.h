@@ -9,4 +9,10 @@
 int
 client_run(void);
 
+/**
+ * TODO write something here
+ */
+static void *
+client_thread(void *arg);
+
 #endif
