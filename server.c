@@ -25,6 +25,9 @@ typedef struct {
     /* TODO: More stuff here... */
 } server_state_t;
 
+extern pthread_mutex_t lock;
+extern char blocklist[MAX_FILES][MAX_NUM_BLOCKS];
+
 static bool
 server_handle_get_file_meta(server_state_t *state)
 {
@@ -156,17 +159,20 @@ server_handle_get_block_list(server_state_t *state)
     }
 
     /* Write the size of the bitmap */ 
-    uint32_t num_blocks = 0; /* TODO */ 
-
-		//get the size of the bitmap
-    uint32_t bitmap_size = num_blocks % 8 == 0 ? number_of_blocks / 8 : number_of_blocks / 8 + 1;
+    uint32_t bitmap_size = meta.block_count % 8 == 0 ? meta.block_count / 8 : meta.block_count / 8 + 1;
     if (!cmd_write(fd, &bitmap_size, sizeof(bitmap_size))) {
         return false;
     }
 
     /* TODO: Write block info */
-	  char *converted = calloc(size);
-		for(uint32_t i = 0; i < num_blocks; i++){
+	  char *converted = calloc(bitmap_size);
+    char *arr = malloc(meta.block_count);
+
+    pthread_mutex_lock(&lock);
+    memcpy(arr, blocklist[index], meta.block_count);
+    pthread_mutex_unlock(&lock);
+
+		for(uint32_t i = 0; i < meta.block_count; i++){
     		uint32_t bitshift = i % 8;
 
     		if(arr[current_file_number][i] == 2){
@@ -175,10 +181,15 @@ server_handle_get_block_list(server_state_t *state)
         		converted[i] |= 0 << bitshift;
     		}
 		}
+
 		if (!cmd_write(fd, converted, bitmap_size)){
-				return false;
+				free(converted);
+        free(arr);
+        return false;
 		}
-   
+
+    free(converted);
+    free(arr);
     return true;
 }
 

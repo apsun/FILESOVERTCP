@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <pthread.h>
+#include "type.h"
 
 
 extern pthread_mutex_t lock;
@@ -161,11 +163,11 @@ get_file_meta_by_filename(char * filename)
         file_meta_t temp = filelist[i];
         if(strcmp(t.file_name, filename) == 0)
         {
-            pthread_mutex_unlock(&m);
+            pthread_mutex_unlock(&lock);
             return temp;
         }
     }
-    pthread_mutex_unlock(&m);
+    pthread_mutex_unlock(&lock);
     return NULL;
 }
 
@@ -179,12 +181,12 @@ get_file_meta_by_file_id(file_id_t file_id, int * index, int * fd)
         if(file_id_compare(file_id, temp.id)) //can probably do this with memcmp but this should be more safe.
         {
             *fd = fdList[i];
-            pthread_mutex_unlock(&m);
+            pthread_mutex_unlock(&lock);
             *index = i;
             return temp;
         }
     }
-    pthread_mutex_unlock(&m);
+    pthread_mutex_unlock(&lock);
     return NULL;
 }
 bool
