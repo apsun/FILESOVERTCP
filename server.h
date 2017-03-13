@@ -12,7 +12,7 @@ server_run(uint16_t port);
 /**
  * TODO write something here
  */
-static void *
+void *
 server_thread(void *arg);
 
 #endif

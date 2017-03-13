@@ -26,7 +26,7 @@ typedef struct {
 } server_state_t;
 
 extern pthread_mutex_t lock;
-extern char blocklist[MAX_FILES][MAX_NUM_BLOCKS];
+extern char blocklist[MAX_NUM_FILES][MAX_NUM_BLOCKS];
 
 static bool
 server_handle_get_file_meta(server_state_t *state)
@@ -100,9 +100,9 @@ server_handle_get_peer_list(server_state_t *state)
 
     /* Check that we know about this file */
     int index = -1;
-    int filefd = -1
+    int filefd = -1;
     file_meta_t meta;
-    if (!get_file_meta_by_file_id(file_id_t file_id, &index, &filefd, &meta)) {
+    if (!get_file_meta_by_file_id(file_id, &index, &filefd, &meta)) {
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
     }
 
@@ -149,7 +149,7 @@ server_handle_get_block_list(server_state_t *state)
     int index = -1;
     int filefd = -1;
     file_meta_t meta; 
-    if (!get_file_meta_by_file_id(file_id_t file_id, &index, &filefd)) {
+    if (!get_file_meta_by_file_id(file_id, &index, &filefd, &meta)) {
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
     }
 
@@ -164,8 +164,8 @@ server_handle_get_block_list(server_state_t *state)
         return false;
     }
 
-    /* TODO: Write block info */
-	  char *converted = calloc(bitmap_size);
+    
+	char *converted = calloc(bitmap_size, 1);
     char *arr = malloc(meta.block_count);
 
     pthread_mutex_lock(&lock);
@@ -175,7 +175,7 @@ server_handle_get_block_list(server_state_t *state)
 		for(uint32_t i = 0; i < meta.block_count; i++){
     		uint32_t bitshift = i % 8;
 
-    		if(arr[current_file_number][i] == 2){
+    		if(arr[i] == 2){
         		converted[i] |= 1 << bitshift;
     		}else{
         		converted[i] |= 0 << bitshift;
@@ -183,7 +183,7 @@ server_handle_get_block_list(server_state_t *state)
 		}
 
 		if (!cmd_write(fd, converted, bitmap_size)){
-				free(converted);
+		free(converted);
         free(arr);
         return false;
 		}
@@ -210,7 +210,7 @@ server_handle_get_block_data(server_state_t *state)
     int file_index = -1;
     int filefd = -1;
     file_meta_t meta;
-    if (!get_file_meta_by_file_id(file_id_t file_id, &file_index, &filefd, &meta)) {
+    if (!get_file_meta_by_file_id(file_id, &file_index, &filefd, &meta)) {
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
         return false;
     }
@@ -221,7 +221,7 @@ server_handle_get_block_data(server_state_t *state)
         cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
         return false;
     }
-    if (!have_block(fileindex, block_index)) {
+    if (!have_block(file_index, block_index)) {
         cmd_write_response_header(fd, op, CMD_ERR_BLOCK_NOT_FOUND);
     }
 
@@ -231,22 +231,26 @@ server_handle_get_block_data(server_state_t *state)
     if(!read_block(filefd, blockdata, meta.block_size, offset))
     {
         cmd_write_response_header(fd, op, CMD_ERR_BLOCK_NOT_FOUND);
+        free(blockdata);
         return false;
     }
 
     /* Write response header */
     if (!cmd_write_response_header(fd, op, CMD_ERR_OK)) {
+        free(blockdata);
         return false;
     }
 
     /* Write block length */
     uint32_t block_len = meta.block_size;
     if (!cmd_write(fd, &block_len, sizeof(block_len))) {
+        free(blockdata);
         return false;
     }
 
     /* Write the block data */
     if (!cmd_write(fd, &blockdata, meta.block_size)) {
+        free(blockdata);
         return false;
     }
     free(blockdata);
@@ -315,7 +319,7 @@ cleanup:
     return NULL;
 }
 
-static void *
+void *
 server_thread(void *arg)
 {
     int sockfd = -1;

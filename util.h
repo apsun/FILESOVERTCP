@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <sys/types.h>
+#include "type.h"
 
 /**
  * Prints the formatted message to stderr.
@@ -74,5 +75,14 @@ copy_string(char *dest, const char *src, size_t *length);
  */
 bool
 get_file_name(char *out_name, const char *path, size_t *length);
+
+bool
+get_file_meta_by_filename(char * filename, file_meta_t *file_meta);
+
+bool
+get_file_meta_by_file_id(file_id_t file_id, int * index, int * fd, file_meta_t *file_meta);
+
+bool
+have_block(int file_index, uint64_t block_index);
 
 #endif
