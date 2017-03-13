@@ -156,13 +156,29 @@ server_handle_get_block_list(server_state_t *state)
     }
 
     /* Write the size of the bitmap */ 
-    uint32_t num_blocks = 0; /* TODO */
-    if (!cmd_write(fd, &num_blocks, sizeof(num_blocks))) {
+    uint32_t num_blocks = 0; /* TODO */ 
+
+		//get the size of the bitmap
+    uint32_t bitmap_size = num_blocks % 8 == 0 ? number_of_blocks / 8 : number_of_blocks / 8 + 1;
+    if (!cmd_write(fd, &bitmap_size, sizeof(bitmap_size))) {
         return false;
     }
 
     /* TODO: Write block info */
+	  char *converted = calloc(size);
+		for(uint32_t i = 0; i < num_blocks; i++){
+    		uint32_t bitshift = i % 8;
 
+    		if(arr[current_file_number][i] == 2){
+        		converted[i] |= 1 << bitshift;
+    		}else{
+        		converted[i] |= 0 << bitshift;
+    		}
+		}
+		if (!cmd_write(fd, converted, bitmap_size)){
+				return false;
+		}
+   
     return true;
 }
 
