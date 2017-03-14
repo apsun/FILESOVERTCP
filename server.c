@@ -27,6 +27,8 @@ typedef struct {
 
 extern pthread_mutex_t lock;
 extern char blocklist[MAX_NUM_FILES][MAX_NUM_BLOCKS];
+extern peer_t peerlist[MAX_NUM_FILES][MAX_NUM_PEERS];
+extern int peer_per_file[MAX_NUM_FILES];
 
 static bool
 server_handle_get_file_meta(server_state_t *state)
@@ -111,16 +113,21 @@ server_handle_get_peer_list(server_state_t *state)
         return false;
     }
 
-    /* Write number of peers in the following list */
-    uint32_t num_peers = 0; /* TODO */
+    /* Write number of peers in the following list and get the list */
+    pthread_mutex_lock(&lock);
+    uint32_t num_peers = peer_per_file[index];
+    peer_t peers[MAX_NUM_PEERS];
+    memcpy(peers, peerlist[index], MAX_NUM_PEERS * sizeof(peer_t));
+    pthread_mutex_unlock(&lock);
+
     if (!cmd_write(fd, &num_peers, sizeof(num_peers))) {
         return false;
     }
 
     /* Write each peer's IP address */
     for (uint32_t i = 0; i < num_peers; ++i) {
-        uint32_t peer_ip = 0; /* TODO */
-        uint16_t peer_port = 0;
+        uint32_t peer_ip = peers[i].ip_addr; 
+        uint16_t peer_port = peers[i].port;
         if (!cmd_write(fd, &peer_ip, sizeof(peer_ip))) {
             return false;
         }

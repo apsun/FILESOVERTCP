@@ -35,6 +35,10 @@ int files = 0;
 int fdList[MAX_NUM_FILES];
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
+peer_t peerlist[MAX_NUM_FILES][MAX_NUM_PEERS];
+// i know this array is bad
+int peer_per_file[MAX_NUM_FILES];
+
 
 static int
 usage(const char *name) //this function is outdated.

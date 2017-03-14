@@ -27,7 +27,11 @@
 /**
  * Maximum number of files supported at once.
  */
-#define MAX_NUM_FILES 1000
+#define MAX_NUM_FILES 100
+/**
+ * Maximum number of peers per file (ONLY TEMPORARY)
+ */
+#define MAX_NUM_PEERS 100
 
 /**
  * File ID structure
@@ -42,6 +46,14 @@ typedef struct {
 typedef struct {
     char digest[32];
 } sha256_t;
+
+/**
+ * Peerlist struct
+ */
+typedef struct {
+    uint32_t ip_addr;
+    uint64_t port;
+} peer_t;
 
 /**
  * File metadata structure
