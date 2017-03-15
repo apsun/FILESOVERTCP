@@ -199,7 +199,7 @@ client_handle_get_peer_list(client_state_t *state)
 
     //get the num of peers
     uint32_t num_peers;
-    if (!cmd_write(fd, &num_peers, sizeof(num_peers))) {
+    if (!cmd_read(fd, &num_peers, sizeof(num_peers))) {
         return false;
     }
     //get all of the peer information
@@ -209,7 +209,7 @@ client_handle_get_peer_list(client_state_t *state)
             free(peers);
             return false;
         }
-        if (!cmd_write(fd, &(peers[i].port), sizeof(peers[i].port))) {
+        if (!cmd_read(fd, &(peers[i].port), sizeof(peers[i].port))) {
             free(peers);
             return false;
         }
@@ -304,7 +304,7 @@ client_handle_get_file_meta(client_state_t *state)
     state->file_index = files;
     files++;
     pthread_mutex_unlock(&lock);
-    return client_handle_get_peer_list(state); //after we get the file meta we just get the peerlist.
+    return true; //after we get the file meta we just get the peerlist in client connect now.
 }
 
 void *
@@ -337,10 +337,7 @@ client_connect(void * args)
     {
         client_handle_get_file_meta(state);
     }
-    else
-    {
-        client_handle_get_peer_list(state); //if we do have the file then we are just trying to connect to new peers.
-    }
+    client_handle_get_peer_list(state); //get peer list after we have files or if we already did.
     //i guess its fine if this function always returns null?
     return NULL;
 }
