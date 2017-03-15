@@ -18,6 +18,17 @@
 static int num_files;
 static file_state_t files[MAX_NUM_FILES];
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+
+bool
+mark_block(filestate_t * file, uint32_t index, block_status_t bs)
+{
+    pthread_mutex_lock(&(file->lock));
+    file->block_status[index] = bs;
+    pthread_mutex_unlock(&(file->lock));
+    return true;
+}
+
 bool
 add_new_peer(filestate_t * file, peer_info_t peer)
 {
@@ -36,6 +47,7 @@ add_new_peer(filestate_t * file, peer_info_t peer)
     {
         file->peerlist[file->num_peers] = peer;
     }
+    pthread_mutex_unlock(&(file->lock));
     return newpeer;
 }
 
@@ -73,7 +85,7 @@ add_files(const char *file_path)
         for(size_t i = 0; i < filelist[files].block_count; i++)
         {
             //filelist[files].block_hashes[i] = ?; dont know how to hash.
-            files[num_files].block_status = 2; //we have everthing
+            files[num_files].block_status = BS_HAVE; //we have everthing
         }
         files[num_files].lock = PTHREAD_MUTEX_INITIALIZER;
         num_files++;
