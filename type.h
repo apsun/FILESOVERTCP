@@ -63,8 +63,8 @@ typedef struct {
  */
 typedef enum {
     BS_DONT_HAVE,
-    BS_HAVE,
     BS_DOWNLOADING,
+    BS_HAVE,
 } block_status_t;
 
 /**

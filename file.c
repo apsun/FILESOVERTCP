@@ -209,3 +209,25 @@ get_block_data(file_state_t *file, uint32_t block_index, uint8_t *block_data)
     pthread_mutex_unlock(&file->lock);
     return ok;
 }
+
+bool
+find_needed_block(file_state_t *file, char *block_list, uint32_t *block_index)
+{
+    pthread_mutex_lock(&file->lock);
+    uint32_t num_blocks = file->meta.block_count;
+    for (uint32_t i = 0; i < num_blocks; ++i) {
+        if (file->block_list[i]) {
+            continue;
+        }
+        uint32_t index = i / 8;
+        uint32_t shift = i % 8;
+        if (block_list[index] & (1 << shift) != 0) {
+            file->block_status[i] = BS_DOWNLOADING;
+            *block_index = i;
+            pthread_mutex_unlock(&file->lock);
+            return true;
+        }
+    }
+    pthread_mutex_unlock(&file->lock);
+    return false;
+}
