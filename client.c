@@ -17,7 +17,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
-
+#include <string.h>
+#include <stdio.h>
 extern pthread_mutex_t lock;
 extern char blocklist[MAX_NUM_FILES][MAX_NUM_BLOCKS];
 extern file_meta_t filelist[MAX_NUM_FILES];
@@ -426,9 +427,72 @@ client_run(void * arg)
 {
     //this function should take stdin of filename, ip and port and try and download that file by creating worker threads with those args
     //and then call client_connect.
+
+    char *line = NULL;
+    size_t size = 0;
+    size_t MAX_THREADS = 4096; //this is just temporary solution
+    size_t current_tid = 0;
+    pthread_t tid[MAX_THREADS];
+
+    while(getline(&line, &size, stdin) != -1){
+        char *temp = strstr(line, "\n");
+        if(temp) *temp = '\0';
+        char *token = strtok(line, " ");
+        char *filename = NULL;
+        char *ip = NULL;
+        char *port = NULL;
+        for(int i = 0; i < 3; i++){
+            switch(i){
+                case 0:
+                    filename = strdup(token);
+                    break;
+                case 1:
+                    ip = strdup(token);
+                    break;
+                case 2:
+                    port = strdup(token); 
+                    break;
+            }
+
+            token = strtok(NULL, " ");
+            if(token == NULL) break;
+        }
+        
+        /**
+         *  Create the thread corresponding to the input
+         */
+        client_state_t *state = malloc(sizeof(client_state_t));
+
+        //set everything except sock fd which is set in client_connect
+        state->server_ip = atoi(ip);
+        state->server_port = atoi(port);
+        strcpy(state->filename,filename);
+        state->file_name_len = strlen(filename);
+        state->file_index = -1;
+
+        free(filename);
+        free(ip);
+        free(port);
+
+        pthread_t connection_thread;
+        pthread_create(&connection_thread, NULL, &client_connect, state);
+        pthread_join(connection_thread, 0);
+
+        pthread_create(&tid[current_tid], NULL, &client_worker, state);
+        current_tid++;
+    }
+
+    free(line);
+
+    for(size_t i = 0 ; i<current_tid; i++){
+      pthread_join(tid[i], 0);
+    }
+
+
+    /* OLD CODE
     pthread_t thread;
     client_state_t *state = malloc(sizeof(client_state_t));
-    state->server_ip = 0x7f000001; /* 127.0.0.1 */
+    state->server_ip = 0x7f000001;
     state->server_port = 8888;
 
     if (pthread_create(&thread, NULL, client_worker, state) < 0) {
@@ -443,6 +507,7 @@ client_run(void * arg)
         perror("Failed to detach client thread");
         return 1;
     }
+    */
 
     return 0;
 }
