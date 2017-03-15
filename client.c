@@ -527,11 +527,7 @@ client_run(void * arg)
         free(ip);
         free(port);
 
-        pthread_t connection_thread;
-        pthread_create(&connection_thread, NULL, &client_connect, state);
-        pthread_join(connection_thread, 0);
-
-        pthread_create(&tid[current_tid], NULL, &client_worker, state);
+        pthread_create(&tid[current_tid], NULL, &client_connect, state);
         current_tid++;
     }
 
