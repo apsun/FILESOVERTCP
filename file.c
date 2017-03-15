@@ -19,6 +19,28 @@ static int num_files;
 static file_state_t files[MAX_NUM_FILES];
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
+bool
+remove_peer(filestate_t *file, peer_info_t peer)
+{
+    pthread_mutex_lock(&(file->lock));
+    bool foundpeer = true;
+    size_t i;
+    for(i = 0; i < file->num_peers; i++)
+    {
+        peer_t temp = file->peer_list[i];
+        if((temp.ip_addr == peer.ip_addr) &&(temp.port == peer.port))
+        {
+            foundpeer = true;            
+            break;
+        }
+    }
+    if(foundpeer)
+    {
+        memmove(peerlist + i, peerlist + i + 1, (MAX_NUM_PEERS - i - 1) * sizeof(peer_list)); //VERIFY THIS WORKS.
+    }
+    pthread_mutex_unlock(&(file->lock));
+    return foundpeer;
+}
 
 bool
 mark_block(filestate_t * file, uint32_t index, block_status_t bs)

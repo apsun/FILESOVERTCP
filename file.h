@@ -2,6 +2,8 @@
 #include <stdint.h>
 #include "type.h"
 
+bool
+remove_peer(filestate_t *file, peer_info_t peer);
 
 /**
  * Marks the block as what it wants
