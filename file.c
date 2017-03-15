@@ -53,11 +53,21 @@ add_files(const char *file_path)
         for(size_t i = 0; i < filelist[files].block_count; i++)
         {
             //filelist[files].block_hashes[i] = ?; dont know how to hash.
-            blocklist[files][i] = 2; //we have everthing
+            files[num_files].block_status = 2; //we have everthing
         }
+        files[num_files].lock = PTHREAD_MUTEX_INITIALIZER;
         num_files++;
     }
     return true;
+}
+file_state_t *
+add_file(file_meta_t meta)
+{
+    files[num_files].file_fd = open( meta.file_name, O_CREAT | O_RDWR );
+    files[num_files].meta = meta;
+    files[num_files].lock = PTHREAD_MUTEX_INITIALIZER;
+    num_files++;
+    return &files[num_files - 1];
 }
 
 bool

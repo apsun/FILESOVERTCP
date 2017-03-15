@@ -11,6 +11,14 @@ bool
 add_files(const char *file_path)
 
 /**
+ * Adds a file given the meta.
+ * Returns a pointer to a filestate object.
+ */
+file_state_t *
+add_file(file_meta_t meta)
+
+
+/**
  * Gets a file by name. Returns true and writes out_file
  * if the file exists, and returns false otherwise.
  */
