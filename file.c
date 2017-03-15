@@ -31,7 +31,7 @@ add_files(const char *file_path)
         printe("Can not open directory");
         return false;
     }
-
+    pthread_mutex_lock(&lock);
     while((entry = readdir(dp)))
     {
         char pathname[4096]; //the maximum path length on linux
@@ -58,15 +58,18 @@ add_files(const char *file_path)
         files[num_files].lock = PTHREAD_MUTEX_INITIALIZER;
         num_files++;
     }
+    pthread_mutex_unlock(&lock);
     return true;
 }
 file_state_t *
-add_file(file_meta_t meta)
+add_file(file_meta_t * meta)
 {
-    files[num_files].file_fd = open( meta.file_name, O_CREAT | O_RDWR );
-    files[num_files].meta = meta;
+    pthread_mutex_lock(&lock);
+    files[num_files].file_fd = open( meta->file_name, O_CREAT | O_RDWR );
+    files[num_files].meta = *meta;
     files[num_files].lock = PTHREAD_MUTEX_INITIALIZER;
     num_files++;
+    pthread_mutex_unlock(&lock);
     return &files[num_files - 1];
 }
 
