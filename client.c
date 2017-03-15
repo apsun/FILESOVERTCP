@@ -95,7 +95,7 @@ client_get_peer_list(client_state_t *state)
             pthread_t thread;
             if (pthread_create(&thread, NULL, client_worker, new_arg) < 0) {
                 perror("Failed to create new worker thread");
-                free(statepeer);
+                free(new_arg);
                 return false;
             }
 
@@ -110,157 +110,15 @@ client_get_peer_list(client_state_t *state)
     return true;
 }
 
-bool
-client_connect(client_state_t *state)
-{
-    int sockfd = -1;
-
-    /* Create TCP socket */
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
-        perror("Failed to create TCP socket");
-        return false;
-    }
-
-    /* Connect to server */
-    struct sockaddr_in addr = {0};
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(state->server_port);
-    addr.sin_addr.s_addr = htonl(state->server_ip);
-    if (connect(sockfd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        perror("Failed to connect to server");
-        close(sockfd);
-        return false;
-    }
-
-    /* Connection successful! */
-    printf("Connected to %s:%d\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-
-    /* Write and check the magic bytes */
-    uint32_t magic = FTCP_MAGIC;
-    if (!cmd_write(fd, &magic, sizeof(magic))) {
-        printe("Failed to write FTCP_MAGIC\n");
-        close(sockfd);
-        return false;
-    }
-
-    /* Read magic from server */
-    if (!cmd_read(fd, &magic, sizeof(magic))) {
-        printe("Failed to read FTCP_MAGIC\n");
-        close(sockfd);
-        return false;
-    }
-
-    if (magic != FTCP_MAGIC) {
-        printe("Magic mismatch, expected FTCP_MAGIC, got 0x%08x\n", magic);
-        return false;
-    }
-
-    state->sockfd = sockfd;
-    return true;
-}
-
-
-void *
-client_worker_new_file(void *arg)
-{
-    client_state_t *state = arg;
-    if (!client_connect(state)) {
-        goto cleanup;
-    }
-
-    /* Write request header */
-    uint32_t op = CMD_OP_GET_FILE_META;
-    if (!cmd_write_request_header(fd, op)) {
-        printe("Failed to write request header\n");
-        goto cleanup;
-    }
-
-    /* Note the +1; the spec accounts for the NUL char */
-    char *str = file->u.file_name;
-    uint32_t len = strlen(str) + 1;
-
-    /* Write string length */
-    if (!cmd_write(fd, &len, sizeof(len))) {
-        printe("Failed to write string length\n");
-        goto cleanup;
-    }
-
-    /* Write string contents */
-    if (!cmd_write(fd, str, len)) {
-        printe("Failed to write string\n");
-        goto cleanup;
-    }
-
-    /* Read response header */
-    uint32_t op_resp, err;
-    if (!cmd_read_response_header(fd, &op_resp, &err)) {
-        printe("Failed to read response header\n");
-        goto cleanup;
-    }
-
-    /* Check valid op response */
-    if (op_resp != CMD_OP_GET_FILE_META) {
-        printe("Op mismatch! Expected GET_FILE_META, got: %08x\n", op_resp);
-        goto cleanup;
-    }
-
-    /* Check error code */
-    if (err != CMD_ERR_OK) {
-        printe("Server returned error code: %08x\n", err);
-        goto cleanup;
-    }
-
-    /* Read the metadata */
-    file_meta_t meta;
-    if (!cmd_read(fd, &meta, sizeof(meta))) {
-        printe("Failed to read file metadata\n");
-        goto cleanup;
-    }
-
-    /* TODO: Write file to disk */
-    file_state_t *file = create_local_file(&meta);
-
-    /* Enter client loop */
-    state->u.file = file;
-    client_loop(state);
-
- cleanup:
-    if (state->sockfd >= 0) {
-        close(state->sockfd);
-    }
-    free(state);
-    return NULL;
-}
-
-void *
-client_worker(void *arg)
-{
-    client_state_t *state = arg;
-    if (!client_connect(state)) {
-        goto cleanup;
-    }
-
-    /* Enter client loop */
-    client_loop(state);
-
-cleanup:
-    if (state->sockfd >= 0) {
-        close(state->sockfd);
-    }
-    free(state);
-    return NULL;
-}
-
-static char *
-client_get_block_list(client_state_t *state)
+static bool
+client_get_block_list(client_state_t *state, uint8_t block_bitmap[(MAX_NUM_BLOCKS + 7) / 8])
 {
     int fd = state->sockfd;
     file_state_t *file = state->u.file;
 
     /* Write request header */
     if (!cmd_write_request_header(fd, CMD_OP_GET_BLOCK_LIST)) {
-        return NULL;
+        return false;
     }
 
     /* Write file ID */
@@ -269,34 +127,29 @@ client_get_block_list(client_state_t *state)
         return false;
     }
 
-    // get op and err of the response.
-    uint32_t op;
-    uint32_t err;
-    if(!cmd_read_response_header(fd, &op, &err))
-    {
-        return NULL;
+    /* Read response header */
+    uint32_t op, err;
+    if (!cmd_read_response_header(fd, &op, &err)) {
+        return false;
     }
 
-    //check if op and err of the response is correct
-    if(op != CMD_OP_GET_BLOCK_LIST || err != CMD_ERR_OK)
-    {
-        return NULL;
+    /* Check op and error code */
+    if (op != CMD_OP_GET_BLOCK_LIST || err != CMD_ERR_OK) {
+        return false;
     }
 
-    //get the size of the bitmap
-    uint32_t bitmap_size;
-    if (!cmd_read(fd, &bitmap_size, sizeof(bitmap_size))) {
-        return NULL;
+    /* Read bitmap size */
+    uint32_t num_blocks;
+    if (!cmd_read(fd, &num_blocks, sizeof(num_blocks))) {
+        return false;
     }
 
-    //get the bitmap
-    char * bitmap = malloc(bitmap_size);
-    if (!cmd_read(fd, bitmap, (bitmap_size + 7) / 8)) {
-        free(bitmap);
-        return NULL;
+    /* Read bitmap */
+    if (!cmd_read(fd, block_bitmap, (num_blocks + 7) / 8)) {
+        return false;
     }
 
-    return bitmap;
+    return true;
 }
 
 static bool
@@ -338,7 +191,7 @@ client_get_block_data(client_state_t *state, uint32_t block_index)
     }
 
     /* Read block contents */
-    char *block_data = malloc(block_size);
+    uint8_t *block_data = malloc(block_size);
     if (!cmd_read(fd, block_data, block_size)){
         free(block_data);
         return false;
@@ -364,12 +217,11 @@ client_get_block_data(client_state_t *state, uint32_t block_index)
 static void
 client_loop(client_state_t *state)
 {
+    uint8_t block_list[(MAX_NUM_BLOCKS + 7) / 8];
     char *block_list = NULL;
-    while (1) {
-        client_get_peer_list(state);
-        block_list = client_get_block_list(state);
-        if (block_list == NULL) {
-            return false;
+    while (client_get_peer_list(state)) {
+        if (!client_get_block_list(state, block_list)) {
+            break;
         }
 
         uint32_t block_index;
@@ -381,99 +233,162 @@ client_loop(client_state_t *state)
             }
         }
     }
+}
 
- cleanup:
-    free(block_list);
+static bool
+client_connect(client_state_t *state)
+{
+    int sockfd = -1;
+
+    /* Create TCP socket */
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        perror("Failed to create TCP socket");
+        return false;
+    }
+
+    /* Connect to server */
+    struct sockaddr_in addr = {0};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(state->server_port);
+    addr.sin_addr.s_addr = htonl(state->server_ip);
+    if (connect(sockfd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        perror("Failed to connect to server");
+        close(sockfd);
+        return false;
+    }
+
+    /* Connection successful! */
+    printf("Connected to %s:%d\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+
+    /* Write and the magic bytes */
+    uint32_t magic = FTCP_MAGIC;
+    if (!cmd_write(fd, &magic, sizeof(magic))) {
+        printe("Failed to write FTCP_MAGIC\n");
+        close(sockfd);
+        return false;
+    }
+
+    /* Read magic from server */
+    if (!cmd_read(fd, &magic, sizeof(magic))) {
+        printe("Failed to read FTCP_MAGIC\n");
+        close(sockfd);
+        return false;
+    }
+
+    /* Check magic match */
+    if (magic != FTCP_MAGIC) {
+        printe("Magic mismatch, expected FTCP_MAGIC, got 0x%08x\n", magic);
+        return false;
+    }
+
+    state->sockfd = sockfd;
     return true;
 }
 
-
-void *
-client_run(void * arg)
+static void *
+client_worker_new_file(void *arg)
 {
-    //this function should take stdin of filename, ip and port and try and download that file by creating worker threads with those args
-    //and then call client_connect.
-
-    char *line = NULL;
-    size_t size = 0;
-    size_t MAX_THREADS = 4096; //this is just temporary solution
-    size_t current_tid = 0;
-    pthread_t tid[MAX_THREADS];
-
-    while(getline(&line, &size, stdin) != -1){
-        char *temp = strstr(line, "\n");
-        if(temp) *temp = '\0';
-        char *token = strtok(line, " ");
-        char *filename = NULL;
-        char *ip = NULL;
-        char *port = NULL;
-        for(int i = 0; i < 3; i++){
-            switch(i){
-                case 0:
-                    filename = strdup(token);
-                    break;
-                case 1:
-                    ip = strdup(token);
-                    break;
-                case 2:
-                    port = strdup(token); 
-                    break;
-            }
-
-            token = strtok(NULL, " ");
-            if(token == NULL) break;
-        }
-        
-        /**
-         *  Create the thread corresponding to the input
-         */
-        client_state_t *state = malloc(sizeof(client_state_t));
-
-        //set everything except sock fd which is set in client_connect
-        state->server_ip = atoi(ip);
-        state->server_port = atoi(port);
-        strcpy(state->filename,filename);
-        state->file_name_len = strlen(filename);
-        state->file_index = -1;
-
-        free(filename);
-        free(ip);
-        free(port);
-
-        pthread_t connection_thread;
-        pthread_create(&connection_thread, NULL, &client_connect, state);
-        pthread_join(connection_thread, 0);
-
-        pthread_create(&tid[current_tid], NULL, &client_worker, state);
-        current_tid++;
+    client_state_t *state = arg;
+    if (!client_connect(state)) {
+        goto cleanup;
     }
 
-    free(line);
-
-    for(size_t i = 0 ; i<current_tid; i++){
-      pthread_join(tid[i], 0);
+    /* Write request header */
+    if (!cmd_write_request_header(fd, CMD_OP_GET_FILE_META)) {
+        printe("Failed to write request header\n");
+        goto cleanup;
     }
 
+    /* Note the +1; the spec accounts for the NUL char */
+    char *str = file->u.file_name;
+    uint32_t len = strlen(str) + 1;
 
-    /* OLD CODE
-    pthread_t thread;
+    /* Write string length */
+    if (!cmd_write(fd, &len, sizeof(len))) {
+        printe("Failed to write string length\n");
+        goto cleanup;
+    }
+
+    /* Write string contents */
+    if (!cmd_write(fd, str, len)) {
+        printe("Failed to write string\n");
+        goto cleanup;
+    }
+
+    /* Read response header */
+    uint32_t op, err;
+    if (!cmd_read_response_header(fd, &op, &err)) {
+        printe("Failed to read response header\n");
+        goto cleanup;
+    }
+
+    /* Check op and error code */
+    if (op != CMD_OP_GET_FILE_META || err != CMD_ERR_OK) {
+        printe("Response error: op(%08x), err(%08x)\n", op, err);
+        goto cleanup;
+    }
+
+    /* Read the metadata */
+    file_meta_t meta;
+    if (!cmd_read(fd, &meta, sizeof(meta))) {
+        printe("Failed to read file metadata\n");
+        goto cleanup;
+    }
+
+    /* Write metadata to disk and add file to tracker */
+    file_state_t *file = create_local_file(&meta);
+
+    /* Enter client loop */
+    state->u.file = file;
+    client_loop(state);
+
+ cleanup:
+    if (state->sockfd >= 0) {
+        close(state->sockfd);
+    }
+    free(state);
+    return NULL;
+}
+
+static void *
+client_worker(void *arg)
+{
+    client_state_t *state = arg;
+    if (!client_connect(state)) {
+        goto cleanup;
+    }
+
+    /* Directly enter client loop */
+    client_loop(state);
+
+cleanup:
+    if (state->sockfd >= 0) {
+        close(state->sockfd);
+    }
+    free(state);
+    return NULL;
+}
+
+void
+client_run(uint32_t ip_addr, uint16_t port, const char *file_name)
+{
     client_state_t *state = malloc(sizeof(client_state_t));
-    state->server_ip = 0x7f000001;
-    state->server_port = 8888;
+    state->server.ip_addr = ip_addr;
+    state->server.port = port;
+    state->u.file_name = file_name;
+    state->sockfd = -1;
 
-    if (pthread_create(&thread, NULL, client_worker, state) < 0) {
+    pthread_t thread;
+    if (pthread_create(&thread, NULL, client_worker_new_file, state) < 0) {
         perror("Failed to create client thread");
         return 1;
     }
-
-    pthread_join(thread, NULL);
-    return 0;
 
     if (pthread_detach(thread) < 0) {
         perror("Failed to detach client thread");
         return 1;
     }
-    */
 
     return 0;
 }
