@@ -4,6 +4,13 @@
 
 
 /**
+ * Checks if a peer is new
+ * If it is adds it to the peerlist and returns true.
+ */
+bool
+add_new_peer(filestate_t * file, peer_info_t peer)
+
+/**
  * Adds all the files in file_path and sets all the blocks as downloaded
  * Returns false if it can not open the directory.
  */

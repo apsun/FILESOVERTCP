@@ -18,6 +18,26 @@
 static int num_files;
 static file_state_t files[MAX_NUM_FILES];
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+bool
+add_new_peer(filestate_t * file, peer_info_t peer)
+{
+    pthread_mutex_lock(&(file->lock));
+    bool newpeer = true;
+    for(size_t i = 0; i < file->num_peers; i++)
+    {
+        peer_t temp = file->peer_list[i];
+        if((temp.ip_addr == peer.ip_addr) &&(temp.port == peer.port))
+        {
+            newpeer = false;
+            break;
+        }
+    }
+    if(newpeer)
+    {
+        file->peerlist[file->num_peers] = peer;
+    }
+    return newpeer;
+}
 
 bool
 add_files(const char *file_path)
