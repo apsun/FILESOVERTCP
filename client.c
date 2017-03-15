@@ -155,19 +155,44 @@ client_handle_get_block_data(client_state_t *state, uint32_t block_index)
     pthread_mutex_unlock(&lock);
     return true;
 }
-
+static bool
+client_find_needed_block(client_state_t *state, char * list, uint32_t * index)
+{
+    //this function finds a needed block AND marks it as downloading.
+    pthread_mutex_lock(&lock);
+    uint32_t block_count = filelist[state->file_index].block_count;
+    for(size_t i = 0; i < block_count; i++)
+    {
+        //find if block is needed and if it is mark it as downloading then return true.
+        //dont forget to unlock the mutex.
+    }
+    pthread_mutex_unlock(&lock);
+    return false;
+}
 static bool
 client_get_blocks(client_state_t *state)
 {
     //this function will get the connections block check it against our blocks see if their is anything to get and mark it as downloading and get it.
     //repeat this process till their is no blocks left then maybe restart it.
-    int fd = state->sockfd;
-
-    if(!cmd_write_request_header(fd, CMD_OP_GET_BLOCK_LIST)){
+    char * list = client_handle_get_block_list(state);
+    if(list == NULL)
+    {
         return false;
     }
-
-    
+    uint32_t index = -1;
+    while(client_find_needed_block(state, list, &index))
+    {
+        if(!client_handle_get_block_data(state, index))
+        {
+            pthread_mutex_lock(&lock);
+            blocklist[state->file_index][index] = 0; //if it fails unmark it as downloading.
+            pthread_mutex_unlock(&lock);
+            free(list);
+            return false; //if a transfer fails then don't use that client again?
+        }
+    }
+    //i dont know what to do here should i restart the search wait, check if the list is still the same and give up. I don't know.
+    free(list);
 
     return true;
 }
@@ -342,6 +367,26 @@ client_connect(void * args)
     /* Connection successful! */
     printf("Connected to %s:%d\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
     state->sockfd = sockfd;
+    //do initial handshake
+    int fd = sockfd;
+    /* Read and check the magic bytes */
+    uint32_t magic = FTCP_MAGIC;
+    if (!cmd_write(fd, &magic, sizeof(magic))) {
+        printe("Failed to write FTCP_MAGIC\n");
+        return NULL;
+    }
+
+    /* Read magic from server */
+    if (!cmd_read(fd, &magic, sizeof(magic))) {
+        printe("Failed to read FTCP_MAGIC\n");
+        return NULL;
+    }
+
+    if (magic != FTCP_MAGIC) {
+        printe("Magic mismatch, expected FTCP_MAGIC, got 0x%08x\n", magic);
+        return NULL;
+    }
+
     if(state->file_index == -1) //we dont have the file meta.
     {
         client_handle_get_file_meta(state);
