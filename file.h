@@ -2,6 +2,14 @@
 #include <stdint.h>
 #include "type.h"
 
+
+/**
+ * Adds all the files in file_path and sets all the blocks as downloaded
+ * Returns false if it can not open the directory.
+ */
+bool
+add_files(const char *file_path)
+
 /**
  * Gets a file by name. Returns true and writes out_file
  * if the file exists, and returns false otherwise.

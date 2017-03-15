@@ -20,9 +20,44 @@ static file_state_t files[MAX_NUM_FILES];
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 bool
-add_file(const char *file_path)
+add_files(const char *file_path)
 {
-    
+    const char *dirName = file_path;
+    struct dirent *entry;
+    DIR *dp;
+
+    dp = opendir(dirName);
+    if (dp == NULL) {
+        printe("Can not open directory");
+        return false;
+    }
+
+    while((entry = readdir(dp)))
+    {
+        char pathname[4096]; //the maximum path length on linux
+        sprintf( pathname, "%s/%s", dirName, entry->d_name );
+        files[num_files].file_fd = open( pathname, O_RDONLY ); //should only need to be read to
+        struct stat buf;
+        fstat(files[num_files], &buf);
+        files[num_files].meta.magic = FTCP_MAGIC;
+        files[num_files].meta.file_name_len = strlen(entry->d_name) + 1;
+        files[num_files].meta.file_size = buf.st_size;
+        files[num_files].meta.block_size = block_calculate_size(filelist[files].file_size);
+        files[num_files].meta.block_count = (files[num_files].meta.file_size % files[num_files].meta.block_size) ? (files[num_files].file_size / files[num_files].block_size) + 1 : (files[num_files].file_size / files[num_files].block_size);
+        //filelist[files].file_hash = ?
+        randomGUID(&files[num_files].meta.id); 
+        for(size_t i = 0; i < filelist[files].file_name_len; i++)
+        {
+            files[num_files].meta.file_name[i] = entry->d_name[i]; // gets the file name and sets it.
+        }
+        for(size_t i = 0; i < filelist[files].block_count; i++)
+        {
+            //filelist[files].block_hashes[i] = ?; dont know how to hash.
+            blocklist[files][i] = 2; //we have everthing
+        }
+        num_files++;
+    }
+    return true;
 }
 
 bool
