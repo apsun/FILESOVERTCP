@@ -13,6 +13,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#if 0
+int num_files;
+file_state_t files[MAX_NUM_FILES];
 
 
 //GLOBAL DECLARATIONS change to pointers.
@@ -105,5 +108,11 @@ main(int argc, char **argv)
     }
     pthread_join(thread1, NULL);
     pthread_join(thread2, NULL);
+    return 0;
+}
+#endif
+
+int main()
+{
     return 0;
 }

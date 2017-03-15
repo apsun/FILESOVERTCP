@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 /**
  * Magic bytes that begin all FTCP connections and metadata files.
@@ -37,23 +38,32 @@
  * File ID structure
  */
 typedef struct {
-    char bytes[16];
+    uint8_t bytes[16];
 } file_id_t;
 
 /**
  * SHA-3-256 digest structure
  */
 typedef struct {
-    char digest[32];
+    uint8_t digest[32];
 } sha256_t;
 
 /**
- * Peerlist struct
+ * Peer info structure
  */
 typedef struct {
     uint32_t ip_addr;
-    uint64_t port;
-} peer_t;
+    uint16_t port;
+} peer_info_t;
+
+/**
+ * Possible state of each block
+ */
+typedef enum {
+    BS_DONT_HAVE,
+    BS_HAVE,
+    BS_DOWNLOADING,
+} block_status_t;
 
 /**
  * File metadata structure
@@ -99,12 +109,36 @@ typedef struct {
      * Number of blocks. Must be less than or equal to
      * MAX_NUM_BLOCKS.
      */
-    uint64_t block_count;
+    uint32_t block_count;
 
     /**
      * SHA-3-256 hash of each block.
      */
     sha256_t block_hashes[MAX_NUM_BLOCKS];
 } file_meta_t;
+
+/**
+ * File state (mutable)
+ */
+typedef struct {
+    /* File info */
+    file_meta_t meta;
+
+    /* Lock for this file struct */
+    pthread_mutex_t lock;
+
+    /* Block info */
+    block_status_t block_status[MAX_NUM_BLOCKS];
+
+    /* Peer list for this file */
+    uint32_t num_peers;
+    peer_info_t peer_list[MAX_NUM_PEERS];
+
+    /* File descriptor for the actual file */
+    int file_fd;
+
+    /* File descriptor for the block status file */
+    int block_info_fd;
+} file_state_t;
 
 #endif

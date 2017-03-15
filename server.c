@@ -2,6 +2,7 @@
 #include "util.h"
 #include "type.h"
 #include "cmd.h"
+#include "file.h"
 #include "block.h"
 #include <stdio.h>
 #include <stdint.h>
@@ -24,11 +25,6 @@ typedef struct {
     uint32_t client_ip;
     /* TODO: More stuff here... */
 } server_state_t;
-
-extern pthread_mutex_t lock;
-extern char blocklist[MAX_NUM_FILES][MAX_NUM_BLOCKS];
-extern peer_t peerlist[MAX_NUM_FILES][MAX_NUM_PEERS];
-extern int peer_per_file[MAX_NUM_FILES];
 
 static bool
 server_handle_get_file_meta(server_state_t *state)
@@ -69,18 +65,19 @@ server_handle_get_file_meta(server_state_t *state)
     }
 
     /* Checks to see if we have the file */
-    file_meta_t meta;
-    if (!get_file_meta_by_filename(file_name, &meta)) {
+    file_state_t *file;
+    if (!get_file_by_name(file_name, &file)) {
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
         return false;
     }
+
     /* Write response header */
     if (!cmd_write_response_header(fd, op, CMD_ERR_OK)) {
         return false;
     }
 
     /* Write response */
-    if (!cmd_write(fd, &meta, sizeof(meta))) {
+    if (!cmd_write(fd, &file->meta, sizeof(file->meta))) {
         return false;
     }
 
@@ -100,34 +97,31 @@ server_handle_get_peer_list(server_state_t *state)
         return false;
     }
 
-    /* Check that we know about this file */
-    int index = -1;
-    int filefd = -1;
-    file_meta_t meta;
-    if (!get_file_meta_by_file_id(file_id, &index, &filefd, &meta)) {
+    /* Get file state */
+    file_state_t *file;
+    if (!get_file_by_id(&file_id, &file)) {
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
+        return false;
     }
+
+    /* Get peer list */
+    peer_info_t peer_list[MAX_NUM_PEERS];
+    uint32_t num_peers = get_peer_list(file, peer_list);
 
     /* Write response header */
     if (!cmd_write_response_header(fd, op, CMD_ERR_OK)) {
         return false;
     }
 
-    /* Write number of peers in the following list and get the list */
-    pthread_mutex_lock(&lock);
-    uint32_t num_peers = peer_per_file[index];
-    peer_t peers[MAX_NUM_PEERS];
-    memcpy(peers, peerlist[index], MAX_NUM_PEERS * sizeof(peer_t));
-    pthread_mutex_unlock(&lock);
-
+    /* Write number of peers */
     if (!cmd_write(fd, &num_peers, sizeof(num_peers))) {
         return false;
     }
 
     /* Write each peer's IP address */
     for (uint32_t i = 0; i < num_peers; ++i) {
-        uint32_t peer_ip = peers[i].ip_addr; 
-        uint16_t peer_port = peers[i].port;
+        uint32_t peer_ip = peer_list[i].ip_addr;
+        uint16_t peer_port = peer_list[i].port;
         if (!cmd_write(fd, &peer_ip, sizeof(peer_ip))) {
             return false;
         }
@@ -152,57 +146,51 @@ server_handle_get_block_list(server_state_t *state)
         return false;
     }
 
-    /* Check that we know about this file */
-    int index = -1;
-    int filefd = -1;
-    file_meta_t meta; 
-    if (!get_file_meta_by_file_id(file_id, &index, &filefd, &meta)) {
+    /* Get file state */
+    file_state_t *file;
+    if (!get_file_by_id(&file_id, &file)) {
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
+        return false;
     }
+
+    /* Get status of all blocks */
+    block_status_t block_status[MAX_NUM_BLOCKS];
+    uint32_t num_blocks = get_block_status_list(file, block_status);
 
     /* Write response header */
     if (!cmd_write_response_header(fd, op, CMD_ERR_OK)) {
         return false;
     }
 
-    /* Write the size of the bitmap */ 
-    uint32_t bitmap_size = meta.block_count % 8 == 0 ? meta.block_count / 8 : meta.block_count / 8 + 1;
-    if (!cmd_write(fd, &bitmap_size, sizeof(bitmap_size))) {
+    /* Write the size of the bitmap */
+    if (!cmd_write(fd, &num_blocks, sizeof(num_blocks))) {
         return false;
     }
 
-    
-	char *converted = calloc(bitmap_size, 1);
-    char *arr = malloc(meta.block_count);
+    /* Write block bitmap */
+    for (uint32_t i = 0; i < num_blocks; i += 8) {
+        /* Pack bits. 1 = have, 0 = otherwise */
+        uint8_t packed = 0;
+        for (int j = 0; j < 8 && i + j < num_blocks; ++j) {
+            if (block_status[i + j] == BS_HAVE) {
+                packed |= (1 << j);
+            }
+        }
 
-    pthread_mutex_lock(&lock);
-    memcpy(arr, blocklist[index], meta.block_count);
-    pthread_mutex_unlock(&lock);
+        /* Write bitmap chunk */
+        if (!cmd_write(fd, &packed, sizeof(packed))) {
+            return false;
+        }
+    }
 
-		for(uint32_t i = 0; i < meta.block_count; i++){
-    		uint32_t bitshift = i % 8;
-
-    		if(arr[i] == 2){
-        		converted[i] |= 1 << bitshift;
-    		}else{
-        		converted[i] |= 0 << bitshift;
-    		}
-		}
-
-		if (!cmd_write(fd, converted, bitmap_size)){
-		free(converted);
-        free(arr);
-        return false;
-		}
-
-    free(converted);
-    free(arr);
     return true;
 }
 
 static bool
 server_handle_get_block_data(server_state_t *state)
 {
+    bool ok = false;
+    uint8_t *block_data = NULL;
     const uint32_t op = CMD_OP_GET_BLOCK_DATA;
     int fd = state->asockfd;
 
@@ -210,59 +198,56 @@ server_handle_get_block_data(server_state_t *state)
     file_id_t file_id;
     if (!cmd_read(fd, &file_id, sizeof(file_id))) {
         cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
-        return false;
-    }
-
-    /* Check that we know about this file */
-    int file_index = -1;
-    int filefd = -1;
-    file_meta_t meta;
-    if (!get_file_meta_by_file_id(file_id, &file_index, &filefd, &meta)) {
-        cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
-        return false;
+        goto cleanup;
     }
 
     /* Read block index */
-    uint64_t block_index = -1;
+    uint32_t block_index;
     if (!cmd_read(fd, &block_index, sizeof(block_index))) {
         cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
-        return false;
-    }
-    if (!have_block(file_index, block_index)) {
-        cmd_write_response_header(fd, op, CMD_ERR_BLOCK_NOT_FOUND);
+        goto cleanup;
     }
 
-    /* Get the block data */
-    char * blockdata = malloc(meta.block_size);
-    off_t offset = block_index * meta.block_size;
-    if(!read_block(filefd, blockdata, meta.block_size, offset))
-    {
+    /* Get file state */
+    file_state_t *file;
+    if (!get_file_by_id(&file_id, &file)) {
+        cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
+        goto cleanup;
+    }
+
+    /* Allocate space to hold the block */
+    block_data = malloc(file->meta.block_size);
+    if (block_data == NULL) {
+        cmd_write_response_header(fd, op, CMD_ERR_UNKNOWN);
+        goto cleanup;
+    }
+
+    /* Read the data from the block */
+    if (!get_block_data(file, block_index, block_data)) {
         cmd_write_response_header(fd, op, CMD_ERR_BLOCK_NOT_FOUND);
-        free(blockdata);
-        return false;
+        goto cleanup;
     }
 
     /* Write response header */
     if (!cmd_write_response_header(fd, op, CMD_ERR_OK)) {
-        free(blockdata);
-        return false;
+        goto cleanup;
     }
 
-    /* Write block length */
-    uint32_t block_len = meta.block_size;
-    if (!cmd_write(fd, &block_len, sizeof(block_len))) {
-        free(blockdata);
-        return false;
+    /* Write size of block */
+    if (!cmd_write(fd, &file->meta.block_size, sizeof(file->meta.block_size))) {
+        goto cleanup;
     }
 
-    /* Write the block data */
-    if (!cmd_write(fd, &blockdata, meta.block_size)) {
-        free(blockdata);
-        return false;
+    /* Write block contents */
+    if (!cmd_write(fd, block_data, file->meta.block_size)) {
+        goto cleanup;
     }
-    free(blockdata);
 
-    return true;
+    ok = true;
+
+cleanup:
+    free(block_data);
+    return ok;
 }
 
 static bool
@@ -410,7 +395,7 @@ server_run(uint16_t port)
 
     pthread_join(thread, NULL);
     return 0;
-    
+
     if (pthread_detach(thread) < 0) {
         perror("Failed to detach server thread");
         return 1;
