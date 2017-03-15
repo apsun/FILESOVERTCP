@@ -104,7 +104,11 @@ add_file(file_meta_t * meta)
     pthread_mutex_unlock(&lock);
     return &files[num_files - 1];
 }
-
+file_state_t *
+create_local_file(file_meta_t * meta)
+{
+    return add_file(meta);
+}
 bool
 get_file_by_name(const char *file_name, file_state_t **out_file)
 {
