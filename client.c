@@ -161,6 +161,14 @@ client_get_blocks(client_state_t *state)
 {
     //this function will get the connections block check it against our blocks see if their is anything to get and mark it as downloading and get it.
     //repeat this process till their is no blocks left then maybe restart it.
+    int fd = state->sockfd;
+
+    if(!cmd_write_request_header(fd, CMD_OP_GET_BLOCK_LIST)){
+        return false;
+    }
+
+    
+
     return true;
 }
 
