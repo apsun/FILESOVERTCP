@@ -36,6 +36,8 @@ typedef struct {
     } u;
 } client_state_t;
 
+static void *client_worker(void *arg);
+
 static bool
 client_get_peer_list(client_state_t *state)
 {
@@ -48,8 +50,8 @@ client_get_peer_list(client_state_t *state)
     }
 
     /* Write file ID */
-    file_id_t id = state->file->meta.id;
-    if (!cmd_write(fd, &state->file->meta.id, sizeof(state->file->meta.id))) {
+    file_id_t id = state->u.file->meta.id;
+    if (!cmd_write(fd, &state->u.file->meta.id, sizeof(state->u.file->meta.id))) {
         return false;
     }
 
@@ -88,7 +90,7 @@ client_get_peer_list(client_state_t *state)
         /* TODO: This should go into a queue in the future */
         if (add_new_peer(file, peer)) {
             client_state_t *new_arg = malloc(sizeof(client_state_t));
-            new_arg->server = server;
+            new_arg->server = peer;
             new_arg->u.file = file;
 
             /* Spawn new thread for peer */
@@ -122,8 +124,8 @@ client_get_block_list(client_state_t *state, uint8_t block_bitmap[(MAX_NUM_BLOCK
     }
 
     /* Write file ID */
-    file_id_t id = state->file->meta.id;
-    if (!cmd_write(fd, &state->file->meta.id, sizeof(state->file->meta.id))) {
+    file_id_t id = state->u.file->meta.id;
+    if (!cmd_write(fd, &state->u.file->meta.id, sizeof(state->u.file->meta.id))) {
         return false;
     }
 
@@ -156,6 +158,7 @@ static bool
 client_get_block_data(client_state_t *state, uint32_t block_index)
 {
     int fd = state->sockfd;
+    file_state_t *file = state->u.file;
 
     /* Write request header */
     if (!cmd_write_request_header(fd, CMD_OP_GET_BLOCK_DATA)) {
@@ -163,8 +166,8 @@ client_get_block_data(client_state_t *state, uint32_t block_index)
     }
 
     /* Write file ID */
-    file_id_t id = state->file->meta.id;
-    if (!cmd_write(fd, &state->file->meta.id, sizeof(state->file->meta.id))) {
+    file_id_t id = state->u.file->meta.id;
+    if (!cmd_write(fd, &state->u.file->meta.id, sizeof(state->u.file->meta.id))) {
         return false;
     }
 
@@ -199,7 +202,7 @@ client_get_block_data(client_state_t *state, uint32_t block_index)
 
     /* Write block to disk */
     off_t offset = block_index * block_size;
-    if (!write_block(file->file_fd, blockdata, block_size, offset)) {
+    if (!write_block(file->file_fd, block_data, block_size, offset)) {
         free(block_data);
         return false;
     }
@@ -217,19 +220,19 @@ client_get_block_data(client_state_t *state, uint32_t block_index)
 static void
 client_loop(client_state_t *state)
 {
+    file_state_t *file = state->u.file;
     uint8_t block_list[(MAX_NUM_BLOCKS + 7) / 8];
-    char *block_list = NULL;
     while (client_get_peer_list(state)) {
         if (!client_get_block_list(state, block_list)) {
             break;
         }
 
         uint32_t block_index;
-        while (find_needed_block(state->file, block_list, &block_index)) {
+        while (find_needed_block(file, block_list, &block_index)) {
             if (!client_get_block_data(state, block_index)) {
                 remove_peer(file, state->server);
                 mark_block(file, block_index, BS_DONT_HAVE);
-                goto cleanup;
+                return;
             }
         }
     }
@@ -250,8 +253,8 @@ client_connect(client_state_t *state)
     /* Connect to server */
     struct sockaddr_in addr = {0};
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(state->server_port);
-    addr.sin_addr.s_addr = htonl(state->server_ip);
+    addr.sin_port = htons(state->server.port);
+    addr.sin_addr.s_addr = htonl(state->server.ip_addr);
     if (connect(sockfd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         perror("Failed to connect to server");
         close(sockfd);
@@ -263,14 +266,14 @@ client_connect(client_state_t *state)
 
     /* Write and the magic bytes */
     uint32_t magic = FTCP_MAGIC;
-    if (!cmd_write(fd, &magic, sizeof(magic))) {
+    if (!cmd_write(sockfd, &magic, sizeof(magic))) {
         printe("Failed to write FTCP_MAGIC\n");
         close(sockfd);
         return false;
     }
 
     /* Read magic from server */
-    if (!cmd_read(fd, &magic, sizeof(magic))) {
+    if (!cmd_read(sockfd, &magic, sizeof(magic))) {
         printe("Failed to read FTCP_MAGIC\n");
         close(sockfd);
         return false;
@@ -293,6 +296,7 @@ client_worker_new_file(void *arg)
     if (!client_connect(state)) {
         goto cleanup;
     }
+    int fd = state->sockfd;
 
     /* Write request header */
     if (!cmd_write_request_header(fd, CMD_OP_GET_FILE_META)) {
@@ -301,7 +305,7 @@ client_worker_new_file(void *arg)
     }
 
     /* Note the +1; the spec accounts for the NUL char */
-    char *str = file->u.file_name;
+    char *str = state->u.file_name;
     uint32_t len = strlen(str) + 1;
 
     /* Write string length */
@@ -382,13 +386,13 @@ client_run(uint32_t ip_addr, uint16_t port, const char *file_name)
     pthread_t thread;
     if (pthread_create(&thread, NULL, client_worker_new_file, state) < 0) {
         perror("Failed to create client thread");
-        return 1;
+        return;
     }
 
     if (pthread_detach(thread) < 0) {
         perror("Failed to detach client thread");
-        return 1;
+        return;
     }
 
-    return 0;
+    return;
 }

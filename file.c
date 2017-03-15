@@ -11,23 +11,26 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <dirent.h>
 
 static int num_files;
 static file_state_t files[MAX_NUM_FILES];
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 bool
-remove_peer(filestate_t *file, peer_info_t peer)
+remove_peer(file_state_t *file, peer_info_t peer)
 {
     pthread_mutex_lock(&(file->lock));
     bool foundpeer = true;
     size_t i;
     for(i = 0; i < file->num_peers; i++)
     {
-        peer_t temp = file->peer_list[i];
+        peer_info_t temp = file->peer_list[i];
         if((temp.ip_addr == peer.ip_addr) &&(temp.port == peer.port))
         {
             foundpeer = true;            
@@ -36,14 +39,14 @@ remove_peer(filestate_t *file, peer_info_t peer)
     }
     if(foundpeer)
     {
-        memmove(peerlist + i, peerlist + i + 1, (MAX_NUM_PEERS - i - 1) * sizeof(peer_list)); //VERIFY THIS WORKS.
+        memmove(file->peer_list + i, file->peer_list + i + 1, (MAX_NUM_PEERS - i - 1) * sizeof(peer_info_t)); //VERIFY THIS WORKS.
     }
     pthread_mutex_unlock(&(file->lock));
     return foundpeer;
 }
 
 bool
-mark_block(filestate_t * file, uint32_t index, block_status_t bs)
+mark_block(file_state_t * file, uint32_t index, block_status_t bs)
 {
     pthread_mutex_lock(&(file->lock));
     file->block_status[index] = bs;
@@ -52,13 +55,13 @@ mark_block(filestate_t * file, uint32_t index, block_status_t bs)
 }
 
 bool
-add_new_peer(filestate_t * file, peer_info_t peer)
+add_new_peer(file_state_t * file, peer_info_t peer)
 {
     pthread_mutex_lock(&(file->lock));
     bool newpeer = true;
     for(size_t i = 0; i < file->num_peers; i++)
     {
-        peer_t temp = file->peer_list[i];
+        peer_info_t temp = file->peer_list[i];
         if((temp.ip_addr == peer.ip_addr) &&(temp.port == peer.port))
         {
             newpeer = false;
@@ -67,7 +70,7 @@ add_new_peer(filestate_t * file, peer_info_t peer)
     }
     if(newpeer)
     {
-        file->peerlist[file->num_peers] = peer;
+        file->peer_list[file->num_peers] = peer;
     }
     pthread_mutex_unlock(&(file->lock));
     return newpeer;
@@ -92,45 +95,48 @@ add_files(const char *file_path)
         sprintf( pathname, "%s/%s", dirName, entry->d_name );
         files[num_files].file_fd = open( pathname, O_RDONLY ); //should only need to be read to
         struct stat buf;
-        fstat(files[num_files], &buf);
+        fstat(files[num_files].file_fd, &buf);
         files[num_files].meta.magic = FTCP_MAGIC;
         files[num_files].meta.file_name_len = strlen(entry->d_name) + 1;
         files[num_files].meta.file_size = buf.st_size;
-        files[num_files].meta.block_size = block_calculate_size(filelist[files].file_size);
-        files[num_files].meta.block_count = (files[num_files].meta.file_size % files[num_files].meta.block_size) ? (files[num_files].file_size / files[num_files].block_size) + 1 : (files[num_files].file_size / files[num_files].block_size);
+        files[num_files].meta.block_size = block_calculate_size(files[num_files].meta.file_size);
+        files[num_files].meta.block_count = (files[num_files].meta.file_size % files[num_files].meta.block_size) ? (files[num_files].meta.file_size / files[num_files].meta.block_size) + 1 : (files[num_files].meta.file_size / files[num_files].meta.block_size);
         //filelist[files].file_hash = ?
         randomGUID(&files[num_files].meta.id); 
-        for(size_t i = 0; i < filelist[files].file_name_len; i++)
+        for(size_t i = 0; i < files[num_files].meta.file_name_len; i++)
         {
             files[num_files].meta.file_name[i] = entry->d_name[i]; // gets the file name and sets it.
         }
-        for(size_t i = 0; i < filelist[files].block_count; i++)
+        for(size_t i = 0; i < files[num_files].meta.block_count; i++)
         {
             //filelist[files].block_hashes[i] = ?; dont know how to hash.
-            files[num_files].block_status = BS_HAVE; //we have everthing
+            files[num_files].block_status[i] = BS_HAVE; //we have everthing
         }
-        files[num_files].lock = PTHREAD_MUTEX_INITIALIZER;
+        pthread_mutex_init(&files[num_files].lock, NULL);
         num_files++;
     }
     pthread_mutex_unlock(&lock);
     return true;
 }
+
 file_state_t *
 add_file(file_meta_t * meta)
 {
     pthread_mutex_lock(&lock);
     files[num_files].file_fd = open( meta->file_name, O_CREAT | O_RDWR );
     files[num_files].meta = *meta;
-    files[num_files].lock = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_init(&files[num_files].lock, NULL);
     num_files++;
     pthread_mutex_unlock(&lock);
     return &files[num_files - 1];
 }
+
 file_state_t *
 create_local_file(file_meta_t * meta)
 {
     return add_file(meta);
 }
+
 bool
 get_file_by_name(const char *file_name, file_state_t **out_file)
 {
@@ -216,7 +222,7 @@ find_needed_block(file_state_t *file, char *block_list, uint32_t *block_index)
     pthread_mutex_lock(&file->lock);
     uint32_t num_blocks = file->meta.block_count;
     for (uint32_t i = 0; i < num_blocks; ++i) {
-        if (file->block_list[i]) {
+        if (file->block_status[i] == BS_HAVE) {
             continue;
         }
         uint32_t index = i / 8;

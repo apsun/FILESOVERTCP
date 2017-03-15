@@ -3,19 +3,19 @@
 #include "type.h"
 
 bool
-remove_peer(filestate_t *file, peer_info_t peer);
+remove_peer(file_state_t *file, peer_info_t peer);
 
 /**
  * Marks the block as what it wants
  */
 bool
-mark_block(filestate_t * file, uint32_t index, block_status_t bs);
+mark_block(file_state_t * file, uint32_t index, block_status_t bs);
 /**
  * Checks if a peer is new
  * If it is adds it to the peerlist and returns true.
  */
 bool
-add_new_peer(filestate_t * file, peer_info_t peer);
+add_new_peer(file_state_t * file, peer_info_t peer);
 
 /**
  * Adds all the files in file_path and sets all the blocks as downloaded
@@ -29,7 +29,7 @@ add_files(const char *file_path);
  * Returns a pointer to a filestate object.
  */
 file_state_t *
-add_file(file_meta_t meta);
+add_file(file_meta_t *meta);
 
 
 /**

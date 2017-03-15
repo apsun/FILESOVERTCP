@@ -6,11 +6,9 @@
 /**
  * Starts the main client thread.
  */
-void *
-client_run(void* args);
+void
+client_run(uint32_t ip_addr, uint16_t port, const char *file_name);
 
-void *
-client_connect(void * args);
 
 
 #endif
