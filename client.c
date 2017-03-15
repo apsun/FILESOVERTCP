@@ -48,8 +48,8 @@ client_get_peer_list(client_state_t *state)
     }
 
     /* Write file ID */
-    file_id_t id = state->meta.id;
-    if (!cmd_write(fd, &state->meta.id, sizeof(state->meta.id))) {
+    file_id_t id = state->file->meta.id;
+    if (!cmd_write(fd, &state->file->meta.id, sizeof(state->file->meta.id))) {
         return false;
     }
 
@@ -264,8 +264,8 @@ client_get_block_list(client_state_t *state)
     }
 
     /* Write file ID */
-    file_id_t id = state->meta.id;
-    if (!cmd_write(fd, &state->meta.id, sizeof(state->meta.id))) {
+    file_id_t id = state->file->meta.id;
+    if (!cmd_write(fd, &state->file->meta.id, sizeof(state->file->meta.id))) {
         return false;
     }
 
@@ -310,8 +310,8 @@ client_get_block_data(client_state_t *state, uint32_t block_index)
     }
 
     /* Write file ID */
-    file_id_t id = state->meta.id;
-    if (!cmd_write(fd, &state->meta.id, sizeof(state->meta.id))) {
+    file_id_t id = state->file->meta.id;
+    if (!cmd_write(fd, &state->file->meta.id, sizeof(state->file->meta.id))) {
         return false;
     }
 
