@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -17,6 +18,13 @@ extern file_meta_t filelist[MAX_NUM_FILES];
 extern int fdList[MAX_NUM_FILES];
 extern char blocklist[MAX_NUM_FILES][MAX_NUM_BLOCKS];
 
+
+void 
+randomGUID(file_id_t *file_id){
+  for(size_t i = 0; i<16; i++){
+    file_id->bytes[i] = rand();
+  }
+}
 
 void
 printe(const char *fmt, ...)

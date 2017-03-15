@@ -7,6 +7,12 @@
 #include "type.h"
 
 /**
+ * Random 16 bytes
+ */
+void 
+randomGUID(file_id_t *file_id);
+
+/**
  * Prints the formatted message to stderr.
  */
 void
