@@ -1,10 +1,15 @@
+//for pwrite and pread
+#define _XOPEN_SOURCE 500
+
 #include "util.h"
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <pthread.h>
 
 void
 printe(const char *fmt, ...)
@@ -24,7 +29,7 @@ send_all(int sockfd, const void *buf, size_t count)
     while (total < count) {
         ssize_t num = send(sockfd, bufc + total, count - total, MSG_NOSIGNAL);
         if (num < 0) {
-            perror("Write failed");
+            debuge("send_all() failed");
             return false;
         }
         total += num;
@@ -40,10 +45,10 @@ recv_all(int sockfd, void *buf, size_t count)
     while (total < count) {
         ssize_t num = recv(sockfd, bufc + total, count - total, MSG_WAITALL);
         if (num < 0) {
-            perror("Read failed");
+            debuge("recv_all() failed");
             return false;
         } else if (num == 0) {
-            printe("EOF reached before count\n");
+            debugf("EOF reached before count\n");
             return false;
         }
         total += num;
@@ -59,7 +64,7 @@ write_all(int fd, const void *buf, size_t count)
     while (total < count) {
         ssize_t num = write(fd, bufc + total, count - total);
         if (num < 0) {
-            perror("Write failed");
+            debuge("write_all() failed");
             return false;
         }
         total += num;
@@ -75,10 +80,10 @@ read_all(int fd, void *buf, size_t count)
     while (total < count) {
         ssize_t num = read(fd, bufc + total, count - total);
         if (num < 0) {
-            perror("Read failed");
+            debuge("read_all() failed");
             return false;
         } else if (num == 0) {
-            printe("EOF reached before count\n");
+            debugf("EOF reached before count\n");
             return false;
         }
         total += num;
@@ -89,23 +94,36 @@ read_all(int fd, void *buf, size_t count)
 bool
 write_block(int fd, const void *buf, size_t count, off_t file_offset)
 {
-    /* TODO */
-    (void)fd;
-    (void)buf;
-    (void)count;
-    (void)file_offset;
-    return false;
+    const char *bufc = buf;
+    size_t total = 0;
+    while (total < count) {
+        ssize_t num = pwrite(fd, bufc + total, count - total, file_offset);
+        if (num < 0) {
+            debuge("write_block() failed");
+            return false;
+        }
+        total += num;
+    }
+    return true;
 }
 
 bool
 read_block(int fd, void *buf, size_t count, off_t file_offset)
 {
-    /* TODO */
-    (void)fd;
-    (void)buf;
-    (void)count;
-    (void)file_offset;
-    return false;
+    char *bufc = buf;
+    size_t total = 0;
+    while (total < count) {
+        ssize_t num = pread(fd, bufc + total, count - total, file_offset);
+        if (num < 0) {
+            debuge("read_block() failed");
+            return false;
+        } else if (num == 0) {
+            memset(bufc + total, 0, count - total);
+            return true;
+        }
+        total += num;
+    }
+    return true;
 }
 
 bool

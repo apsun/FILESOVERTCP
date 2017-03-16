@@ -2,7 +2,7 @@
 #include "util.h"
 #include "type.h"
 #include "cmd.h"
-#include "block.h"
+#include "file.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -16,13 +16,8 @@
 #include <pthread.h>
 
 typedef struct {
-    uint16_t port;
-} server_arg_t;
-
-typedef struct {
     int asockfd;
     uint32_t client_ip;
-    /* TODO: More stuff here... */
 } server_state_t;
 
 static bool
@@ -34,12 +29,14 @@ server_handle_get_file_meta(server_state_t *state)
     /* Read file name length */
     uint32_t file_name_len;
     if (!cmd_read(fd, &file_name_len, sizeof(file_name_len))) {
+        debugf("Failed to read file name length");
         cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
         return false;
     }
 
     /* Validate file name length */
     if (file_name_len == 0 || file_name_len > MAX_FILE_NAME_LEN) {
+        debugf("File name length invalid");
         cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
         return false;
     }
@@ -47,35 +44,46 @@ server_handle_get_file_meta(server_state_t *state)
     /* Read file name */
     char file_name[MAX_FILE_NAME_LEN];
     if (!cmd_read(fd, file_name, file_name_len)) {
+        debugf("Failed to read file name");
         cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
         return false;
     }
 
     /* Ensure we have a NUL terminator */
     if (file_name[file_name_len - 1] != '\0') {
+        debugf("File name does not end with NUL");
         cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
         return false;
     }
 
     /* Check for embedded NUL characters */
     if (strlen(file_name) != file_name_len - 1) {
+        debugf("File name has embedded NUL chars");
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
         return false;
     }
 
-    /* TODO: Get file info here */
-    file_meta_t meta;
+    /* Checks to see if we have the file */
+    file_state_t *file;
+    if (!get_file_by_name(file_name, &file)) {
+        debugf("Don't have file: %s", file_name);
+        cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
+        return false;
+    }
 
     /* Write response header */
     if (!cmd_write_response_header(fd, op, CMD_ERR_OK)) {
+        debugf("Failed to write response header");
         return false;
     }
 
     /* Write response */
-    if (!cmd_write(fd, &meta, sizeof(meta))) {
+    if (!cmd_write(fd, &file->meta, sizeof(file->meta))) {
+        debugf("Failed to write file meta");
         return false;
     }
 
+    debugf("GET_FILE_META successful");
     return true;
 }
 
@@ -88,38 +96,64 @@ server_handle_get_peer_list(server_state_t *state)
     /* Read file ID */
     file_id_t file_id;
     if (!cmd_read(fd, &file_id, sizeof(file_id))) {
+        debugf("Failed to read file ID");
         cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
         return false;
     }
 
-    /* Check that we know about this file */
-    if (0) { /* TODO */
-        cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
-    }
-
-    /* Write response header */
-    if (!cmd_write_response_header(fd, op, CMD_ERR_OK)) {
+    /* Read client's server port */
+    uint16_t port;
+    if (!cmd_read(fd, &port, sizeof(port))) {
+        debugf("Failed to read client's server port");
+        cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
         return false;
     }
 
-    /* Write number of peers in the following list */
-    uint32_t num_peers = 0; /* TODO */
+    /* Get file state */
+    file_state_t *file;
+    if (!get_file_by_id(&file_id, &file)) {
+        debugf("Could not find file");
+        cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
+        return false;
+    }
+
+    /* Add client to peer list */
+    peer_info_t peer;
+    peer.ip_addr = state->client_ip;
+    peer.port = port;
+    add_new_peer(file, peer);
+
+    /* Get peer list */
+    peer_info_t peer_list[MAX_NUM_PEERS];
+    uint32_t num_peers = get_peer_list(file, peer_list);
+
+    /* Write response header */
+    if (!cmd_write_response_header(fd, op, CMD_ERR_OK)) {
+        debugf("Failed to write response header");
+        return false;
+    }
+
+    /* Write number of peers */
     if (!cmd_write(fd, &num_peers, sizeof(num_peers))) {
+        debugf("Failed to write number of peers");
         return false;
     }
 
     /* Write each peer's IP address */
     for (uint32_t i = 0; i < num_peers; ++i) {
-        uint32_t peer_ip = 0; /* TODO */
-        uint16_t peer_port = 0;
+        uint32_t peer_ip = peer_list[i].ip_addr;
+        uint16_t peer_port = peer_list[i].port;
         if (!cmd_write(fd, &peer_ip, sizeof(peer_ip))) {
+            debugf("Failed to write peer IP #%u", i);
             return false;
         }
         if (!cmd_write(fd, &peer_port, sizeof(peer_port))) {
+            debugf("Failed to write peer port #%u", i);
             return false;
         }
     }
 
+    debugf("GET_PEER_LIST successful");
     return true;
 }
 
@@ -132,63 +166,127 @@ server_handle_get_block_list(server_state_t *state)
     /* Read file ID */
     file_id_t file_id;
     if (!cmd_read(fd, &file_id, sizeof(file_id))) {
+        debugf("Failed to read file ID");
         cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
         return false;
     }
 
-    /* Check that we know about this file */
-    if (0) { /* TODO */
+    /* Get file state */
+    file_state_t *file;
+    if (!get_file_by_id(&file_id, &file)) {
+        debugf("Could not find file");
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
+        return false;
     }
+
+    /* Get status of all blocks */
+    block_status_t block_status[MAX_NUM_BLOCKS];
+    uint32_t num_blocks = get_block_status_list(file, block_status);
 
     /* Write response header */
     if (!cmd_write_response_header(fd, op, CMD_ERR_OK)) {
+        debugf("Failed to write response header");
         return false;
     }
 
     /* Write the size of the bitmap */
-    uint32_t num_blocks = 0; /* TODO */
     if (!cmd_write(fd, &num_blocks, sizeof(num_blocks))) {
+        debugf("Failed to write bitmap size");
         return false;
     }
 
-    /* TODO: Write block info */
+    /* Write block bitmap */
+    for (uint32_t i = 0; i < num_blocks; i += 8) {
+        /* Pack bits. 1 = have, 0 = otherwise */
+        uint8_t packed = 0;
+        for (int j = 0; j < 8 && i + j < num_blocks; ++j) {
+            if (block_status[i + j] == BS_HAVE) {
+                packed |= (1 << j);
+            }
+        }
 
+        /* Write bitmap chunk */
+        if (!cmd_write(fd, &packed, sizeof(packed))) {
+            debugf("Failed to write bitmap chunk");
+            return false;
+        }
+    }
+
+    debugf("GET_BLOCK_LIST successful");
     return true;
 }
 
 static bool
 server_handle_get_block_data(server_state_t *state)
 {
+    bool ok = false;
+    uint8_t *block_data = NULL;
     const uint32_t op = CMD_OP_GET_BLOCK_DATA;
     int fd = state->asockfd;
 
     /* Read file ID */
     file_id_t file_id;
     if (!cmd_read(fd, &file_id, sizeof(file_id))) {
+        debugf("Failed to read file ID");
         cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
-        return false;
+        goto cleanup;
     }
 
-    /* Check that we know about this file */
-    if (0) { /* TODO */
+    /* Read block index */
+    uint32_t block_index;
+    if (!cmd_read(fd, &block_index, sizeof(block_index))) {
+        debugf("Failed to read block index");
+        cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
+        goto cleanup;
+    }
+
+    /* Get file state */
+    file_state_t *file;
+    if (!get_file_by_id(&file_id, &file)) {
+        debugf("Could not find file");
         cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
+        goto cleanup;
+    }
+
+    /* Allocate space to hold the block */
+    block_data = malloc(file->meta.block_size);
+    if (block_data == NULL) {
+        debugf("Out of memory, could not allocate block data");
+        cmd_write_response_header(fd, op, CMD_ERR_UNKNOWN);
+        goto cleanup;
+    }
+
+    /* Read the data from the block */
+    if (!get_block_data(file, block_index, block_data)) {
+        debugf("Failed to read block data");
+        cmd_write_response_header(fd, op, CMD_ERR_BLOCK_NOT_FOUND);
+        goto cleanup;
     }
 
     /* Write response header */
     if (!cmd_write_response_header(fd, op, CMD_ERR_OK)) {
-        return false;
+        debugf("Failed to write response header");
+        goto cleanup;
     }
 
-    /* Write block length */
-    uint32_t block_len = 0;
-    if (!cmd_write(fd, &block_len, sizeof(block_len))) {
-        return false;
+    /* Write size of block */
+    if (!cmd_write(fd, &file->meta.block_size, sizeof(file->meta.block_size))) {
+        debugf("Failed to write size of block");
+        goto cleanup;
     }
 
-    /* TODO: Write block data */
+    /* Write block contents */
+    if (!cmd_write(fd, block_data, file->meta.block_size)) {
+        debugf("Failed to write block data");
+        goto cleanup;
+    }
 
-    return true;
+    debugf("GET_BLOCK_DATA successful");
+    ok = true;
+
+cleanup:
+    free(block_data);
+    return ok;
 }
 
 static bool
@@ -216,18 +314,18 @@ server_worker(void *arg)
     /* Read and check the magic bytes */
     uint32_t magic;
     if (!cmd_read(state->asockfd, &magic, sizeof(magic))) {
-        printe("Failed to read FTCP_MAGIC\n");
+        debugf("Failed to read FTCP_MAGIC");
         goto cleanup;
     }
 
     if (magic != FTCP_MAGIC) {
-        printe("Magic mismatch, expected FTCP_MAGIC, got 0x%08x\n", magic);
+        debugf("Magic mismatch, expected FTCP_MAGIC, got 0x%08x", magic);
         goto cleanup;
     }
 
     /* Respond with our own magic bytes */
     if (!cmd_write(state->asockfd, &magic, sizeof(magic))) {
-        printe("Failed to write FTCP_MAGIC\n");
+        debugf("Failed to write FTCP_MAGIC");
         goto cleanup;
     }
 
@@ -236,23 +334,25 @@ server_worker(void *arg)
         /* Read opcode from client */
         uint32_t op;
         if (!cmd_read_request_header(state->asockfd, &op)) {
+            debugf("Failed to read request header");
             break;
         }
 
         /* Handle opcode */
         if (!server_handle_op(state, op)) {
+            debugf("Handler returned false, exiting");
             break;
         }
     }
 
 cleanup:
-    printf("Cleaning up server worker\n");
+    debugf("Cleaning up server worker\n");
     close(state->asockfd);
     free(state);
     return NULL;
 }
 
-static void *
+void *
 server_thread(void *arg)
 {
     int sockfd = -1;
@@ -261,7 +361,7 @@ server_thread(void *arg)
     /* Create TCP socket */
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) {
-        perror("Failed to create TCP socket");
+        debuge("Failed to create TCP socket");
         goto cleanup;
     }
 
@@ -271,13 +371,13 @@ server_thread(void *arg)
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = inet_addr("0.0.0.0");
     if (bind(sockfd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        perror("Failed to bind socket");
+        debuge("Failed to bind socket");
         goto cleanup;
     }
 
     /* Puts socket into listen mode with max 256 pending connections */
     if (listen(sockfd, 256) < 0) {
-        perror("Failed to mark socket as listener");
+        debuge("Failed to mark socket as listener");
         goto cleanup;
     }
 
@@ -288,12 +388,12 @@ server_thread(void *arg)
         int asockfd = accept(sockfd, (struct sockaddr *)&caddr, &caddr_len);
         if (asockfd < 0) {
             /* Ignore error, continue */
-            perror("Failed to accept client connection");
+            debuge("Failed to accept client connection");
             continue;
         }
 
         /* Connection successful! */
-        printf("Got connection from %s:%d\n", inet_ntoa(caddr.sin_addr), ntohs(caddr.sin_port));
+        debugf("Got connection from %s:%d\n", inet_ntoa(caddr.sin_addr), ntohs(caddr.sin_port));
 
         /* Initialize worker thread args */
         server_state_t *arg = malloc(sizeof(server_state_t));
@@ -303,44 +403,41 @@ server_thread(void *arg)
         /* Create worker thread */
         pthread_t thread;
         if (pthread_create(&thread, NULL, server_worker, arg) < 0) {
-            perror("Failed to create server worker thread");
+            debuge("Failed to create server worker thread");
             free(arg);
             continue;
         }
 
         /* Detach worker thread */
         if (pthread_detach(thread) < 0) {
-            perror("Failed to detach server worker thread");
+            debuge("Failed to detach server worker thread");
             continue;
         }
     }
 
 cleanup:
-    printf("Cleaning up server thread\n");
+    debugf("Cleaning up server thread\n");
     if (sockfd >= 0) {
         close(sockfd);
     }
     return NULL;
 }
 
-int
+void
 server_run(uint16_t port)
 {
     pthread_t thread;
     void *arg = (void *)(size_t)port;
 
     if (pthread_create(&thread, NULL, server_thread, arg) < 0) {
-        perror("Failed to create server thread");
-        return 1;
+        debuge("Failed to create server thread");
+        return;
     }
 
-    pthread_join(thread, NULL);
-    return 0;
-    
     if (pthread_detach(thread) < 0) {
-        perror("Failed to detach server thread");
-        return 1;
+        debuge("Failed to detach server thread");
+        return;
     }
 
-    return 0;
+    debugf("Started server thread");
 }

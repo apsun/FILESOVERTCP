@@ -6,7 +6,7 @@
 /**
  * Starts the main client thread.
  */
-int
-client_run(void);
+void
+client_run(uint32_t ip_addr, uint16_t port, uint16_t server_port, const char *file_name);
 
 #endif
