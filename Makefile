@@ -1,4 +1,4 @@
-CFLAGS = -std=c99 -Wall -Wextra -pedantic -pthread
+CFLAGS = -std=c99 -Wall -Wextra -pedantic -pthread -g
 SRC = $(wildcard *.c)
 OBJS = $(patsubst %.c,%.o,$(filter %.c,$(SRC)))
 OUTPUT = ftcp

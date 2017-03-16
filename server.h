@@ -6,13 +6,7 @@
 /**
  * Starts the main server thread, listening on the specified port.
  */
-int
+void
 server_run(uint16_t port);
-
-/**
- * TODO write something here
- */
-void *
-server_thread(void *arg);
 
 #endif

@@ -2,7 +2,6 @@
 #include "util.h"
 #include "type.h"
 #include "cmd.h"
-#include "block.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -76,8 +75,18 @@ add_new_peer(file_state_t * file, peer_info_t peer)
     return newpeer;
 }
 
+uint64_t
+block_calculate_size(uint64_t file_size)
+{
+    uint64_t block_size = MIN_BLOCK_SIZE;
+    while (file_size / block_size > MAX_NUM_BLOCKS) {
+        block_size *= 2;
+    }
+    return block_size;
+}
+
 bool
-add_files(const char *file_path)
+add_directory(const char *file_path)
 {
     const char *dirName = file_path;
     struct dirent *entry;
@@ -93,6 +102,7 @@ add_files(const char *file_path)
     {
         char pathname[4096]; //the maximum path length on linux
         sprintf( pathname, "%s/%s", dirName, entry->d_name );
+        printf(pathname);
         files[num_files].file_fd = open( pathname, O_RDONLY ); //should only need to be read to
         struct stat buf;
         fstat(files[num_files].file_fd, &buf);
@@ -102,7 +112,7 @@ add_files(const char *file_path)
         files[num_files].meta.block_size = block_calculate_size(files[num_files].meta.file_size);
         files[num_files].meta.block_count = (files[num_files].meta.file_size % files[num_files].meta.block_size) ? (files[num_files].meta.file_size / files[num_files].meta.block_size) + 1 : (files[num_files].meta.file_size / files[num_files].meta.block_size);
         //filelist[files].file_hash = ?
-        randomGUID(&files[num_files].meta.id); 
+        files[num_files].meta.id = generate_file_id();
         for(size_t i = 0; i < files[num_files].meta.file_name_len; i++)
         {
             files[num_files].meta.file_name[i] = entry->d_name[i]; // gets the file name and sets it.
@@ -123,7 +133,10 @@ file_state_t *
 add_file(file_meta_t * meta)
 {
     pthread_mutex_lock(&lock);
-    files[num_files].file_fd = open( meta->file_name, O_CREAT | O_RDWR );
+    files[num_files].file_fd = open( meta->file_name, O_CREAT | O_RDWR, 0664);
+    if (files[num_files].file_fd < 0) {
+        perror("WTF");
+    }
     files[num_files].meta = *meta;
     pthread_mutex_init(&files[num_files].lock, NULL);
     num_files++;
@@ -142,7 +155,7 @@ get_file_by_name(const char *file_name, file_state_t **out_file)
 {
     pthread_mutex_lock(&lock);
     for (int i = 0; i < num_files; ++i) {
-        if (strcmp(file_name, files[i].meta.file_name)) {
+        if (strcmp(file_name, files[i].meta.file_name) == 0) {
             *out_file = &files[i];
             pthread_mutex_unlock(&lock);
             return true;
@@ -211,13 +224,13 @@ get_block_data(file_state_t *file, uint32_t block_index, uint8_t *block_data)
     }
 
     ok = true;
- exit:
+exit:
     pthread_mutex_unlock(&file->lock);
     return ok;
 }
 
 bool
-find_needed_block(file_state_t *file, char *block_list, uint32_t *block_index)
+find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t *block_index)
 {
     pthread_mutex_lock(&file->lock);
     uint32_t num_blocks = file->meta.block_count;
@@ -227,7 +240,7 @@ find_needed_block(file_state_t *file, char *block_list, uint32_t *block_index)
         }
         uint32_t index = i / 8;
         uint32_t shift = i % 8;
-        if (block_list[index] & (1 << shift) != 0) {
+        if ((block_bitmap[index] & (1 << shift)) != 0) {
             file->block_status[i] = BS_DOWNLOADING;
             *block_index = i;
             pthread_mutex_unlock(&file->lock);
@@ -236,4 +249,14 @@ find_needed_block(file_state_t *file, char *block_list, uint32_t *block_index)
     }
     pthread_mutex_unlock(&file->lock);
     return false;
+}
+
+file_id_t
+generate_file_id(void)
+{
+    file_id_t id;
+    for (int i = 0; i < 16; ++i) {
+        id.bytes[i] = rand();
+    }
+    return id;
 }

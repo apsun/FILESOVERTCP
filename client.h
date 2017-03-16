@@ -7,8 +7,6 @@
  * Starts the main client thread.
  */
 void
-client_run(uint32_t ip_addr, uint16_t port, const char *file_name);
-
-
+client_run(uint32_t ip_addr, uint16_t port, uint16_t server_port, const char *file_name);
 
 #endif

@@ -22,7 +22,7 @@ add_new_peer(file_state_t * file, peer_info_t peer);
  * Returns false if it can not open the directory.
  */
 bool
-add_files(const char *file_path);
+add_directory(const char *file_path);
 
 /**
  * Adds a file given the meta.
@@ -31,6 +31,15 @@ add_files(const char *file_path);
 file_state_t *
 add_file(file_meta_t *meta);
 
+file_state_t *
+create_local_file(file_meta_t * meta);
+
+/**
+ * Calculates the optimal size of a block (in bytes) used
+ * to transfer a file of the specified size.
+ */
+uint64_t
+block_calculate_size(uint64_t file_size);
 
 /**
  * Gets a file by name. Returns true and writes out_file
@@ -75,3 +84,14 @@ get_block_status_list(file_state_t *file, block_status_t block_status[MAX_NUM_BL
 bool
 get_block_data(file_state_t *file, uint32_t block_index, uint8_t *block_data);
 
+/**
+ * Gets the index of a block that t
+ */
+bool
+find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t *block_index);
+
+/**
+ * Generates a random file ID.
+ */
+file_id_t
+generate_file_id(void);

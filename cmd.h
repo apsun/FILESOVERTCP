@@ -75,6 +75,7 @@
  * Request:
  *   Bytes 0~7: Request header
  *   Bytes 8~23: GUID of the file
+ *   Bytes 24~25: Local server port
  *
  * Response:
  *   Bytes 0~11: Response header

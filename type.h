@@ -24,7 +24,7 @@
 /**
  * Maximum number of blocks to split a file into.
  */
-#define MAX_NUM_BLOCKS 10000
+#define MAX_NUM_BLOCKS 1000
 
 /**
  * Maximum number of files supported at once.

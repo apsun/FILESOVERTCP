@@ -11,21 +11,6 @@
 #include <sys/socket.h>
 #include <pthread.h>
 
-
-extern pthread_mutex_t lock;
-extern int files;
-extern file_meta_t filelist[MAX_NUM_FILES];
-extern int fdList[MAX_NUM_FILES];
-extern char blocklist[MAX_NUM_FILES][MAX_NUM_BLOCKS];
-
-
-void 
-randomGUID(file_id_t *file_id){
-  for(size_t i = 0; i<16; i++){
-    file_id->bytes[i] = rand();
-  }
-}
-
 void
 printe(const char *fmt, ...)
 {
@@ -44,7 +29,7 @@ send_all(int sockfd, const void *buf, size_t count)
     while (total < count) {
         ssize_t num = send(sockfd, bufc + total, count - total, MSG_NOSIGNAL);
         if (num < 0) {
-            perror("Write failed");
+            debuge("send_all() failed");
             return false;
         }
         total += num;
@@ -60,10 +45,10 @@ recv_all(int sockfd, void *buf, size_t count)
     while (total < count) {
         ssize_t num = recv(sockfd, bufc + total, count - total, MSG_WAITALL);
         if (num < 0) {
-            perror("Read failed");
+            debuge("recv_all() failed");
             return false;
         } else if (num == 0) {
-            printe("EOF reached before count\n");
+            debugf("EOF reached before count\n");
             return false;
         }
         total += num;
@@ -79,7 +64,7 @@ write_all(int fd, const void *buf, size_t count)
     while (total < count) {
         ssize_t num = write(fd, bufc + total, count - total);
         if (num < 0) {
-            perror("Write failed");
+            debuge("write_all() failed");
             return false;
         }
         total += num;
@@ -95,10 +80,10 @@ read_all(int fd, void *buf, size_t count)
     while (total < count) {
         ssize_t num = read(fd, bufc + total, count - total);
         if (num < 0) {
-            perror("Read failed");
+            debuge("read_all() failed");
             return false;
         } else if (num == 0) {
-            printe("EOF reached before count\n");
+            debugf("EOF reached before count\n");
             return false;
         }
         total += num;
@@ -114,7 +99,7 @@ write_block(int fd, const void *buf, size_t count, off_t file_offset)
     while (total < count) {
         ssize_t num = pwrite(fd, bufc + total, count - total, file_offset);
         if (num < 0) {
-            perror("Write failed");
+            debuge("write_block() failed");
             return false;
         }
         total += num;
@@ -130,7 +115,7 @@ read_block(int fd, void *buf, size_t count, off_t file_offset)
     while (total < count) {
         ssize_t num = pread(fd, bufc + total, count - total, file_offset);
         if (num < 0) {
-            perror("Read failed");
+            debuge("read_block() failed");
             return false;
         } else if (num == 0) {
             memset(bufc + total, 0, count - total);

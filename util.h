@@ -4,13 +4,21 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <sys/types.h>
-#include "type.h"
 
-/**
- * Random 16 bytes
- */
-void 
-randomGUID(file_id_t *file_id);
+#define debugf(...)            \
+do {                           \
+    printe(__func__);          \
+    printe(":%u: ", __LINE__); \
+    printe(__VA_ARGS__);       \
+    printe("\n");              \
+} while(0)
+
+#define debuge(msg)            \
+do {                           \
+    printe(__func__);          \
+    printe(":%u: ", __LINE__); \
+    perror(msg);               \
+} while (0)
 
 /**
  * Prints the formatted message to stderr.
