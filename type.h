@@ -37,6 +37,16 @@
 #define MAX_NUM_PEERS 100
 
 /**
+ * Extension for metadata files.
+ */
+#define META_FILE_EXT ".ftcp"
+
+/**
+ * Extension for block info files.
+ */
+#define BLOCK_FILE_EXT ".fblk"
+
+/**
  * File ID structure
  */
 typedef struct {

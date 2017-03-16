@@ -1,4 +1,4 @@
-//for pwrite and pread
+// for pwrite and pread
 #define _XOPEN_SOURCE 500
 
 #include "util.h"
@@ -48,7 +48,7 @@ recv_all(int sockfd, void *buf, size_t count)
             debuge("recv_all() failed");
             return false;
         } else if (num == 0) {
-            debugf("EOF reached before count\n");
+            debugf("EOF reached before count");
             return false;
         }
         total += num;
@@ -83,7 +83,7 @@ read_all(int fd, void *buf, size_t count)
             debuge("read_all() failed");
             return false;
         } else if (num == 0) {
-            debugf("EOF reached before count\n");
+            debugf("EOF reached before count");
             return false;
         }
         total += num;
@@ -148,5 +148,16 @@ get_file_name(char *out_name, const char *path, size_t *length)
         return copy_string(out_name, path, length);
     } else {
         return copy_string(out_name, s + 1, length);
+    }
+}
+
+bool
+has_file_extension(const char *file_name, const char *extension)
+{
+    const char *c = strrchr(file_name, '.');
+    if (c != NULL) {
+        return strcmp(c, extension) == 0;
+    } else {
+        return false;
     }
 }

@@ -2,6 +2,7 @@
 #include "util.h"
 #include "type.h"
 #include "cmd.h"
+#include "sha3.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -21,62 +22,8 @@ static int num_files;
 static file_state_t files[MAX_NUM_FILES];
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
-bool
-remove_peer(file_state_t *file, peer_info_t peer)
-{
-    pthread_mutex_lock(&(file->lock));
-    bool foundpeer = true;
-    size_t i;
-    for(i = 0; i < file->num_peers; i++)
-    {
-        peer_info_t temp = file->peer_list[i];
-        if((temp.ip_addr == peer.ip_addr) &&(temp.port == peer.port))
-        {
-            foundpeer = true;            
-            break;
-        }
-    }
-    if(foundpeer)
-    {
-        memmove(file->peer_list + i, file->peer_list + i + 1, (MAX_NUM_PEERS - i - 1) * sizeof(peer_info_t)); //VERIFY THIS WORKS.
-    }
-    pthread_mutex_unlock(&(file->lock));
-    return foundpeer;
-}
-
-bool
-mark_block(file_state_t * file, uint32_t index, block_status_t bs)
-{
-    pthread_mutex_lock(&(file->lock));
-    file->block_status[index] = bs;
-    pthread_mutex_unlock(&(file->lock));
-    return true;
-}
-
-bool
-add_new_peer(file_state_t * file, peer_info_t peer)
-{
-    pthread_mutex_lock(&(file->lock));
-    bool newpeer = true;
-    for(size_t i = 0; i < file->num_peers; i++)
-    {
-        peer_info_t temp = file->peer_list[i];
-        if((temp.ip_addr == peer.ip_addr) &&(temp.port == peer.port))
-        {
-            newpeer = false;
-            break;
-        }
-    }
-    if(newpeer)
-    {
-        file->peer_list[file->num_peers] = peer;
-    }
-    pthread_mutex_unlock(&(file->lock));
-    return newpeer;
-}
-
-uint64_t
-block_calculate_size(uint64_t file_size)
+static uint64_t
+calculate_block_size(uint64_t file_size)
 {
     uint64_t block_size = MIN_BLOCK_SIZE;
     while (file_size / block_size > MAX_NUM_BLOCKS) {
@@ -85,31 +32,119 @@ block_calculate_size(uint64_t file_size)
     return block_size;
 }
 
-bool
-add_directory(const char *file_path)
+static bool
+file_id_equals(const file_id_t *a, const file_id_t *b)
 {
-    const char *dirName = file_path;
-    struct dirent *entry;
-    DIR *dp;
+    return memcmp(a, b, sizeof(file_id_t)) == 0;
+}
 
-    dp = opendir(dirName);
+static bool
+sha256_equals(const sha256_t *a, const sha256_t *b)
+{
+    return memcmp(a, b, sizeof(sha256_t)) == 0;
+}
+
+static sha256_t
+compute_sha256(uint64_t block_size, uint8_t *block_data)
+{
+    sha256_t checksum;
+    sha3(block_data, block_size, checksum.digest, sizeof(checksum.digest));
+    return checksum;
+}
+
+static file_id_t
+generate_file_id(void)
+{
+    file_id_t id;
+    for (int i = 0; i < 16; ++i) {
+        id.bytes[i] = rand() % 256;
+    }
+    return id;
+}
+
+static file_meta_t
+generate_file_meta(const char *file_path)
+{
+    /* TODO */
+    file_meta_t meta;
+    return meta;
+}
+
+static bool
+set_block_status_impl(file_state_t *file, uint32_t index, block_status_t bs)
+{
+    /* TODO: Update the status of the block file on disk */
+
+    file->block_status[index] = bs;
+    return true;
+}
+
+bool
+set_block_status(file_state_t *file, uint32_t index, block_status_t bs)
+{
+    pthread_mutex_lock(&(file->lock));
+    bool ok = set_block_status_impl(file, index, bs);
+    pthread_mutex_unlock(&(file->lock));
+    return ok;
+}
+
+bool
+add_directory(const char *dir_path)
+{
+    DIR *dp = opendir(dir_path);
     if (dp == NULL) {
-        printe("Can not open directory");
+        debuge("Cannot open directory");
         return false;
     }
+
     pthread_mutex_lock(&lock);
-    while((entry = readdir(dp)))
-    {
-        char pathname[4096]; //the maximum path length on linux
-        sprintf( pathname, "%s/%s", dirName, entry->d_name );
-        printf(pathname);
-        files[num_files].file_fd = open( pathname, O_RDONLY ); //should only need to be read to
+    struct dirent *entry;
+    while ((entry = readdir(dp)) != NULL) {
+        /* Skip current/parent directory entries */
+        if (strcmp(entry->d_name, ".") == 0 ||
+            strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        /* Skip metadata and block info files */
+        if (has_file_extension(entry->d_name, META_FILE_EXT) ||
+            has_file_extension(entry->d_name, BLOCK_FILE_EXT)) {
+            continue;
+        }
+
+        /* Open file */
+        char file_path[4096];
+        sprintf(file_path, "%s/%s", dir_path, entry->d_name);
+        int fd = open(file_path, O_RDWR, 0664);
+        if (fd < 0) {
+            debuge("Could not open file: %s", file_path);
+            continue;
+        }
+
+        /* See if it already has a metadata file */
+        char meta_path[4096];
+        sprintf(meta_path, "%s%s", file_path, META_FILE_EXT);
+        int meta_fd = open(file_path, O_RDONLY, 0664);
+        if (meta_fd < 0) {
+            /* Generate and write a new metadata file */
+        }
+
+        /* See if it already has a block info file */
+        char block_path[4096];
+        sprintf(block_path, "%s%s", file_path, BLOCK_FILE_EXT);
+        int block_fd = open(block_path, O_RDWR, 0664);
+        if (block_fd < 0) {
+            /* Generate a new block info file */
+        }
+
+        files[num_files].file_fd = fd;
+
         struct stat buf;
         fstat(files[num_files].file_fd, &buf);
         files[num_files].meta.magic = FTCP_MAGIC;
         files[num_files].meta.file_name_len = strlen(entry->d_name) + 1;
         files[num_files].meta.file_size = buf.st_size;
-        files[num_files].meta.block_size = block_calculate_size(files[num_files].meta.file_size);
+        files[num_files].meta.block_size = calculate_block_size(files[num_files].meta.file_size);
         files[num_files].meta.block_count = (files[num_files].meta.file_size % files[num_files].meta.block_size) ? (files[num_files].meta.file_size / files[num_files].meta.block_size) + 1 : (files[num_files].meta.file_size / files[num_files].meta.block_size);
         //filelist[files].file_hash = ?
         files[num_files].meta.id = generate_file_id();
@@ -130,18 +165,33 @@ add_directory(const char *file_path)
 }
 
 file_state_t *
-add_file(file_meta_t * meta)
+add_file(file_meta_t *meta)
 {
-    pthread_mutex_lock(&lock);
-    files[num_files].file_fd = open( meta->file_name, O_CREAT | O_RDWR, 0664);
-    if (files[num_files].file_fd < 0) {
-        perror("WTF");
+    int fd = open(meta->file_name, O_CREAT | O_RDWR, 0664);
+    if (fd < 0) {
+        debuge("Failed to open file: %s", meta->file_name);
+        return NULL;
     }
-    files[num_files].meta = *meta;
-    pthread_mutex_init(&files[num_files].lock, NULL);
-    num_files++;
+
+    pthread_mutex_lock(&lock);
+    file_state_t *file = &files[num_files++];
+
+    /* Initialize file structure */
+    pthread_mutex_init(&file->lock, NULL);
+    file->meta = *meta;
+    file->file_fd = fd;
+    file->num_peers = 0;
+    for (int i = 0; i < MAX_NUM_BLOCKS; ++i) {
+        file->block_status[i] = BS_DONT_HAVE;
+    }
+    for (int i = 0; i < MAX_NUM_PEERS; ++i) {
+        file->peer_list[i].ip_addr = 0;
+        file->peer_list[i].port = 0;
+    }
+    /* TODO: block_info_fd */
+
     pthread_mutex_unlock(&lock);
-    return &files[num_files - 1];
+    return file;
 }
 
 file_state_t *
@@ -166,12 +216,6 @@ get_file_by_name(const char *file_name, file_state_t **out_file)
 }
 
 bool
-file_id_equals(const file_id_t *a, const file_id_t *b)
-{
-    return memcmp(a, b, sizeof(file_id_t)) == 0;
-}
-
-bool
 get_file_by_id(const file_id_t *id, file_state_t **out_file)
 {
     pthread_mutex_lock(&lock);
@@ -184,16 +228,6 @@ get_file_by_id(const file_id_t *id, file_state_t **out_file)
     }
     pthread_mutex_unlock(&lock);
     return false;
-}
-
-uint32_t
-get_peer_list(file_state_t *file, peer_info_t peer_list[MAX_NUM_PEERS])
-{
-    pthread_mutex_lock(&file->lock);
-    uint32_t num_peers = file->num_peers;
-    memcpy(peer_list, file->peer_list, num_peers * sizeof(peer_info_t));
-    pthread_mutex_unlock(&file->lock);
-    return num_peers;
 }
 
 uint32_t
@@ -241,22 +275,20 @@ find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t *block_ind
         uint32_t index = i / 8;
         uint32_t shift = i % 8;
         if ((block_bitmap[index] & (1 << shift)) != 0) {
-            file->block_status[i] = BS_DOWNLOADING;
+            bool ok = set_block_status_impl(file, i, BS_DOWNLOADING);
             *block_index = i;
             pthread_mutex_unlock(&file->lock);
-            return true;
+            return ok;
         }
     }
     pthread_mutex_unlock(&file->lock);
     return false;
 }
 
-file_id_t
-generate_file_id(void)
+bool
+check_block(file_state_t *file, uint32_t block_index, uint8_t *block_data)
 {
-    file_id_t id;
-    for (int i = 0; i < 16; ++i) {
-        id.bytes[i] = rand();
-    }
-    return id;
+    sha256_t checksum = compute_sha256(file->meta.block_size, block_data);
+    sha256_t expected = file->meta.block_hashes[block_index];
+    return sha256_equals(&checksum, &expected);
 }

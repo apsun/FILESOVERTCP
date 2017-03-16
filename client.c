@@ -3,6 +3,7 @@
 #include "type.h"
 #include "cmd.h"
 #include "file.h"
+#include "peer.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -102,7 +103,7 @@ client_get_peer_list(client_state_t *state)
 
         /* If we haven't seen this peer before, connect to it */
         /* TODO: This should go into a queue in the future */
-        if (add_new_peer(file, peer)) {
+        if (peer_add(file, peer)) {
             client_state_t *new_arg = malloc(sizeof(client_state_t));
             new_arg->server = peer;
             new_arg->u.file = file;
@@ -156,7 +157,7 @@ client_get_block_list(client_state_t *state, uint8_t block_bitmap[(MAX_NUM_BLOCK
 
     /* Check op and error code */
     if (op != CMD_OP_GET_BLOCK_LIST || err != CMD_ERR_OK) {
-        debugf("Response = error");
+        debugf("Response error: op(%08x), err(%08x)", op, err);
         return false;
     }
 
@@ -211,7 +212,7 @@ client_get_block_data(client_state_t *state, uint32_t block_index)
 
     /* Check response op/err */
     if (op != CMD_OP_GET_BLOCK_DATA || err != CMD_ERR_OK) {
-        debugf("Response = error");
+        debugf("Response error: op(%08x), err(%08x)", op, err);
         return false;
     }
 
@@ -242,7 +243,7 @@ client_get_block_data(client_state_t *state, uint32_t block_index)
     free(block_data);
 
     /* Mark block as completed */
-    if (!mark_block(file, block_index, BS_HAVE)) {
+    if (!set_block_status(file, block_index, BS_HAVE)) {
         debugf("Failed to mark block as completed");
         return false;
     }
@@ -266,8 +267,8 @@ client_loop(client_state_t *state)
         uint32_t block_index;
         while (find_needed_block(file, block_list, &block_index)) {
             if (!client_get_block_data(state, block_index)) {
-                remove_peer(file, state->server);
-                mark_block(file, block_index, BS_DONT_HAVE);
+                peer_remove(file, state->server);
+                set_block_status(file, block_index, BS_DONT_HAVE);
                 return;
             }
         }
@@ -298,7 +299,7 @@ client_connect(client_state_t *state)
     }
 
     /* Connection successful! */
-    debugf("Connected to %s:%d\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+    debugf("Connected to %s:%d", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
 
     /* Write and the magic bytes */
     uint32_t magic = FTCP_MAGIC;

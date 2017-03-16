@@ -3,6 +3,7 @@
 #include "type.h"
 #include "cmd.h"
 #include "file.h"
+#include "peer.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -124,7 +125,7 @@ server_handle_get_peer_list(server_state_t *state)
     peer_info_t peer;
     peer.ip_addr = state->client_ip;
     peer.port = port;
-    add_new_peer(file, peer);
+    peer_add(file, peer);
 
     /* Get peer list */
     peer_info_t peer_list[MAX_NUM_PEERS];

@@ -12,10 +12,12 @@ do {                           \
     printe("\n");              \
 } while(0)
 
-#define debuge(msg)            \
+#define debuge(...)            \
 do {                           \
     printe("[%s:%u] %s: ", __FILE__, __LINE__, __func__); \
-    perror(msg);               \
+    printe(__VA_ARGS__);       \
+    printe(": ");              \
+    perror("");                \
 } while (0)
 
 /**
@@ -87,5 +89,12 @@ copy_string(char *dest, const char *src, size_t *length);
  */
 bool
 get_file_name(char *out_name, const char *path, size_t *length);
+
+/**
+ * Returns true if the file has the specified file extension.
+ * The extension should begin with a '.'
+ */
+bool
+has_file_extension(const char *file_name, const char *extension);
 
 #endif
