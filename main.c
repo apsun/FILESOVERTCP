@@ -37,7 +37,7 @@ main(int argc, char **argv)
         add_directory(name);
         server_run(8888);
     } else if (strcmp(mode, "client") == 0) {
-        client_run(0x7f000001, 8888, 8888, name);
+        client_run("127.0.0.1", 8888, 8888, name);
     }
     
     while (1);

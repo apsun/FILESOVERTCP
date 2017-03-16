@@ -2,6 +2,7 @@
 #define UTIL_H
 
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdbool.h>
 #include <sys/types.h>
 
@@ -96,5 +97,18 @@ get_file_name(char *out_name, const char *path, size_t *length);
  */
 bool
 has_file_extension(const char *file_name, const char *extension);
+
+/**
+ * Converts the specified IP address from integer to string form.
+ * Returns the buffer that is passed in.
+ */
+char *
+ipv4_itoa(uint32_t ip, char buf[16]);
+
+/**
+ * Converts the specified IP address from string to integer form.
+ */
+bool
+ipv4_atoi(const char *ip, uint32_t *out_ip);
 
 #endif

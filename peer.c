@@ -25,16 +25,17 @@ get_peer_list(file_state_t *file, peer_info_t peer_list[MAX_NUM_PEERS])
 bool
 peer_add(file_state_t *file, peer_info_t peer)
 {
+    char buf[16];
     pthread_mutex_lock(&file->lock);
     for (uint32_t i = 0; i < file->num_peers; ++i) {
         if (peer_equals(&peer, &file->peer_list[i])) {
-            debugf("Peer already in list: %08x:%u", peer.ip_addr, peer.port);
+            debugf("Peer already in list: %s:%u", ipv4_itoa(peer.ip_addr, buf), peer.port);
             pthread_mutex_unlock(&file->lock);
             return false;
         }
     }
 
-    debugf("Added peer to list: %08x:%u", peer.ip_addr, peer.port);
+    debugf("Added peer to list: %s:%u", ipv4_itoa(peer.ip_addr, buf), peer.port);
     file->peer_list[file->num_peers++] = peer;
     pthread_mutex_unlock(&file->lock);
     return true;
@@ -54,7 +55,8 @@ peer_remove(file_state_t *file, peer_info_t peer)
     }
 
     if (found) {
-        debugf("Removed peer from list: %08x:%u", peer.ip_addr, peer.port);
+        char buf[16];
+        debugf("Removed peer from list: %s:%u", ipv4_itoa(peer.ip_addr, buf), peer.port);
         memmove(&file->peer_list[i], &file->peer_list[i + 1], --file->num_peers - i);
     }
 

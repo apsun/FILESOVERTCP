@@ -285,7 +285,7 @@ server_handle_get_block_data(server_state_t *state)
         goto cleanup;
     }
 
-    debugf("GET_BLOCK_DATA successful");
+    debugf("GET_BLOCK_DATA successful (%u/%u)", block_index + 1, file->meta.block_count);
     ok = true;
 
 cleanup:
@@ -427,7 +427,7 @@ cleanup:
     return NULL;
 }
 
-void
+bool
 server_run(uint16_t port)
 {
     pthread_t thread;
@@ -435,13 +435,13 @@ server_run(uint16_t port)
 
     if (pthread_create(&thread, NULL, server_thread, arg) < 0) {
         debuge("Failed to create server thread");
-        return;
+        return false;
     }
 
     if (pthread_detach(thread) < 0) {
         debuge("Failed to detach server thread");
-        return;
     }
 
     debugf("Started server thread");
+    return true;
 }

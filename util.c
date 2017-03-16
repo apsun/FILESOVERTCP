@@ -7,9 +7,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <pthread.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <pthread.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 void
 printe(const char *fmt, ...)
@@ -160,4 +163,25 @@ has_file_extension(const char *file_name, const char *extension)
     } else {
         return false;
     }
+}
+
+char *
+ipv4_itoa(uint32_t ip, char buf[16])
+{
+    struct in_addr addr;
+    addr.s_addr =  htonl(ip);
+    char *str = inet_ntoa(addr);
+    strncpy(buf, str, 16);
+    return buf;
+}
+
+bool
+ipv4_atoi(const char *ip, uint32_t *out_ip)
+{
+    in_addr_t ip_n = inet_addr(ip);
+    if (ip_n == INADDR_NONE) {
+        return false;
+    }
+    *out_ip = ntohl((uint32_t)ip_n);
+    return true;
 }

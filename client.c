@@ -74,7 +74,7 @@ client_get_peer_list(client_state_t *state)
 
     /* Check response op and error code */
     if (op != CMD_OP_GET_PEER_LIST || err != CMD_ERR_OK) {
-        debugf("Response = error");
+        debugf("Response error: op(%08x), err(%08x)", op, err);
         return false;
     }
 
@@ -248,7 +248,7 @@ client_get_block_data(client_state_t *state, uint32_t block_index)
         return false;
     }
 
-    debugf("GET_BLOCK_DATA successful");
+    debugf("GET_BLOCK_DATA successful (%u/%u)", block_index + 1, file->meta.block_count);
     return true;
 }
 
@@ -414,11 +414,14 @@ cleanup:
     return NULL;
 }
 
-void
-client_run(uint32_t ip_addr, uint16_t port, uint16_t server_port, const char *file_name)
+bool
+client_run(const char *ip_addr, uint16_t port, uint16_t server_port, const char *file_name)
 {
     client_state_t *state = malloc(sizeof(client_state_t));
-    state->server.ip_addr = ip_addr;
+    if (!ipv4_atoi(ip_addr, &state->server.ip_addr)) {
+        debugf("Invalid IP address: %s", ip_addr);
+        return false;
+    }
     state->server.port = port;
     state->u.file_name = file_name;
     state->sockfd = -1;
@@ -427,13 +430,13 @@ client_run(uint32_t ip_addr, uint16_t port, uint16_t server_port, const char *fi
     pthread_t thread;
     if (pthread_create(&thread, NULL, client_worker_new_file, state) < 0) {
         debuge("Failed to create client thread");
-        return;
+        return false;
     }
 
     if (pthread_detach(thread) < 0) {
         debuge("Failed to detach client thread");
-        return;
     }
 
     debugf("Started client thread");
+    return true;
 }
