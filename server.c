@@ -16,7 +16,10 @@
 #include <pthread.h>
 
 typedef struct {
+    /* Holds the socket descriptor */
     int asockfd;
+
+    /* Connected client's IP address */
     uint32_t client_ip;
 } server_state_t;
 
@@ -346,7 +349,7 @@ server_worker(void *arg)
     }
 
 cleanup:
-    debugf("Cleaning up server worker\n");
+    debugf("Cleaning up server worker");
     close(state->asockfd);
     free(state);
     return NULL;
@@ -393,7 +396,7 @@ server_thread(void *arg)
         }
 
         /* Connection successful! */
-        debugf("Got connection from %s:%d\n", inet_ntoa(caddr.sin_addr), ntohs(caddr.sin_port));
+        debugf("Got connection from %s:%d", inet_ntoa(caddr.sin_addr), ntohs(caddr.sin_port));
 
         /* Initialize worker thread args */
         server_state_t *arg = malloc(sizeof(server_state_t));
@@ -416,7 +419,7 @@ server_thread(void *arg)
     }
 
 cleanup:
-    debugf("Cleaning up server thread\n");
+    debugf("Cleaning up server thread");
     if (sockfd >= 0) {
         close(sockfd);
     }

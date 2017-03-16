@@ -7,16 +7,14 @@
 
 #define debugf(...)            \
 do {                           \
-    printe(__func__);          \
-    printe(":%u: ", __LINE__); \
+    printe("[%s:%u] %s: ", __FILE__, __LINE__, __func__); \
     printe(__VA_ARGS__);       \
     printe("\n");              \
 } while(0)
 
 #define debuge(msg)            \
 do {                           \
-    printe(__func__);          \
-    printe(":%u: ", __LINE__); \
+    printe("[%s:%u] %s: ", __FILE__, __LINE__, __func__); \
     perror(msg);               \
 } while (0)
 

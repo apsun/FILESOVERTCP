@@ -97,7 +97,7 @@ write_block(int fd, const void *buf, size_t count, off_t file_offset)
     const char *bufc = buf;
     size_t total = 0;
     while (total < count) {
-        ssize_t num = pwrite(fd, bufc + total, count - total, file_offset);
+        ssize_t num = pwrite(fd, bufc + total, count - total, file_offset + total);
         if (num < 0) {
             debuge("write_block() failed");
             return false;
@@ -113,11 +113,12 @@ read_block(int fd, void *buf, size_t count, off_t file_offset)
     char *bufc = buf;
     size_t total = 0;
     while (total < count) {
-        ssize_t num = pread(fd, bufc + total, count - total, file_offset);
+        ssize_t num = pread(fd, bufc + total, count - total, file_offset + total);
         if (num < 0) {
             debuge("read_block() failed");
             return false;
         } else if (num == 0) {
+            debugf("Reached EOF, padding with NUL bytes");
             memset(bufc + total, 0, count - total);
             return true;
         }

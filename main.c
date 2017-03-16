@@ -17,8 +17,9 @@
 static int
 usage(const char *name)
 {
-    printe("usage: %s <dir>\n", name);
+    printe("usage: %s <mode> <name>\n", name);
     printe("  mode -- \"client\" or \"server\"\n");
+    printe("  name -- directory if server mode, file name if client mode\n");
     return 1;
 }
 
@@ -30,13 +31,13 @@ main(int argc, char **argv)
     }
 
     const char *mode = argv[1];
-    const char *dir_name = argv[2];
+    const char *name = argv[2];
 
     if (strcmp(mode, "server") == 0) {
-        add_directory(dir_name);
+        add_directory(name);
         server_run(8888);
     } else if (strcmp(mode, "client") == 0) {
-        client_run(0x7f000001, 8888, 8888, "file.txt");
+        client_run(0x7f000001, 8888, 8888, name);
     }
     
     while (1);
