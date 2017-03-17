@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/socket.h>
+#include <netinet/tcp.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
@@ -297,6 +298,11 @@ client_connect(client_state_t *state)
         close(sockfd);
         return false;
     }
+
+    /* Optimization */
+    int i = 1;
+    setsockopt( sockfd, IPPROTO_TCP, TCP_NODELAY, (void *)&i, sizeof(i));
+
 
     /* Connection successful! */
     debugf("Connected to %s:%d", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));

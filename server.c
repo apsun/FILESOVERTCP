@@ -13,6 +13,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <pthread.h>
 
@@ -395,6 +396,10 @@ server_thread(void *arg)
             debuge("Failed to accept client connection");
             continue;
         }
+
+        /* Optimization*/
+        int i = 1;
+        setsockopt( asockfd, IPPROTO_TCP, TCP_NODELAY, (void *)&i, sizeof(i));
 
         /* Connection successful! */
         debugf("Got connection from %s:%d", inet_ntoa(caddr.sin_addr), ntohs(caddr.sin_port));
