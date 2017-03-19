@@ -232,6 +232,14 @@ client_get_block_data(client_state_t *state, uint32_t block_index)
         return false;
     }
 
+    /* Check blok data against correct hash */
+    if (!check_block(file, block_index, block_data)) {
+        debugf("BAD HASH");
+        free(block_data);
+        return false;
+    }
+
+
     /* Write block to disk */
     off_t offset = block_index * block_size;
     if (!write_block(file->file_fd, block_data, block_size, offset)) {

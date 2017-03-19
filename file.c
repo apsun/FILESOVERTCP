@@ -155,11 +155,16 @@ add_directory(const char *dir_path)
         {
             files[num_files].meta.file_name[i] = entry->d_name[i]; // gets the file name and sets it.
         }
+        uint8_t * block_data = malloc(files[num_files].meta.block_size);
         for(size_t i = 0; i < files[num_files].meta.block_count; i++)
         {
             //filelist[files].block_hashes[i] = ?; dont know how to hash.
+            off_t offset = files[num_files].meta.block_size * i;            
+            read_block(fd, block_data, files[num_files].meta.block_size, offset);
+            files[num_files].meta.block_hashes[i] = compute_sha256(files[num_files].meta.block_size, block_data);
             files[num_files].block_status[i] = BS_HAVE; //we have everthing
         }
+        free(block_data);
         pthread_mutex_init(&files[num_files].lock, NULL);
         num_files++;
     }
