@@ -1,3 +1,5 @@
+//for srand and drand
+#define _XOPEN_SOURCE 500
 #include "file.h"
 #include "util.h"
 #include "type.h"
@@ -17,6 +19,7 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <dirent.h>
+#include <sys/time.h>
 
 static int num_files;
 static file_state_t files[MAX_NUM_FILES];
@@ -264,12 +267,13 @@ exit:
 }
 
 bool
-find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t *block_index)
+find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t * block_order, uint32_t *block_index)
 {
     pthread_mutex_lock(&file->lock);
     uint32_t num_blocks = file->meta.block_count;
-    for (uint32_t i = 0; i < num_blocks; ++i) {
-        if (file->block_status[i] == BS_HAVE) {
+    for (uint32_t j = 0; j < num_blocks; ++j) {
+        uint32_t i = block_order[j];
+        if (file->block_status[i] != BS_DONT_HAVE) {
             continue;
         }
         uint32_t index = i / 8;
@@ -291,4 +295,36 @@ check_block(file_state_t *file, uint32_t block_index, uint8_t *block_data)
     sha256_t checksum = compute_sha256(file->meta.block_size, block_data);
     sha256_t expected = file->meta.block_hashes[block_index];
     return sha256_equals(&checksum, &expected);
+}
+
+uint32_t *
+generate_random_block_order(file_state_t *file)
+{
+    pthread_mutex_lock(&file->lock);
+    uint32_t num_blocks = file->meta.block_count;
+    pthread_mutex_unlock(&file->lock);
+    uint32_t * ret = malloc(sizeof(uint32_t) * num_blocks);
+    if(ret == NULL)
+    {
+        return ret;
+    }
+    for(uint32_t i = 0; i < num_blocks; ++i)
+    {
+        ret[i] = i;
+    }
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    int usec = tv.tv_usec;
+    srand48(usec);
+    size_t n = num_blocks;
+    if (n > 1) {
+        size_t i;
+        for (i = n - 1; i > 0; i--) {
+            size_t j = (unsigned int) (drand48()*(i+1));
+            uint32_t t = ret[j];
+            ret[j] = ret[i];
+            ret[i] = t;
+        }
+    }
+    return ret;    
 }

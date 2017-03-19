@@ -68,7 +68,7 @@ get_block_data(file_state_t *file, uint32_t block_index, uint8_t *block_data);
  * if any, has its status atomically set to BS_DOWNLOADING.
  */
 bool
-find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t *block_index);
+find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t * block_order, uint32_t *block_index);
 
 /**
  * Validates a downloaded block. Returns true iff the block data
@@ -76,5 +76,12 @@ find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t *block_ind
  */
 bool
 check_block(file_state_t *file, uint32_t block_index, uint8_t *block_data);
+
+/**
+ * Generates an array containtng all of the blockindexes of a file in a random order
+ * Returns a malloced array (NULL if malloc fails).
+ */
+uint32_t *
+generate_random_block_order(file_state_t *file);
 
 #endif
