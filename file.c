@@ -78,14 +78,6 @@ generate_file_id(void)
     return id;
 }
 
-static void
-file_id_to_string(const file_id_t *id, char str[32])
-{
-    for (size_t i = 0; i < 16; ++i) {
-        sprintf(str + 2 * i, "%02x", id->bytes[i]);
-    }
-}
-
 static bool
 read_file_meta(int fd, file_meta_t *meta)
 {
@@ -291,7 +283,12 @@ cleanup:
 }
 
 static bool
-create_file_state(const file_meta_t *meta, const char *file_path, block_status_t bs, file_state_t *state)
+create_file_state(
+    const file_meta_t *meta,
+    const char *file_path,
+    const char *state_path,
+    block_status_t bs,
+    file_state_t *state)
 {
     /* Initialize metadata */
     state->meta = *meta;
@@ -306,7 +303,11 @@ create_file_state(const file_meta_t *meta, const char *file_path, block_status_t
 
     /* Initialize state file path */
     size_t state_path_len = MAX_PATH_LEN;
-    /* TODO */
+    if (!copy_string(state->state_path, state_path, &state_path_len)) {
+        debugf("Failed to copy state file path");
+        return false;
+    }
+    state->state_path_len = state_path_len;
 
     /* Initialize block state list */
     for (int i = 0; i < MAX_NUM_BLOCKS; ++i) {
@@ -324,11 +325,14 @@ create_file_state(const file_meta_t *meta, const char *file_path, block_status_t
 }
 
 static file_state_t *
-add_file_to_tracker(file_state_t *file)
+add_file_to_tracker(file_state_t *file, int file_fd, int state_file_fd)
 {
     pthread_mutex_lock(&lock);
     file_state_t *out = &files[num_files++];
     *out = *file;
+    pthread_mutex_init(&out->lock, NULL);
+    out->file_fd = file_fd;
+    out->state_file_fd = state_file_fd;
     pthread_mutex_unlock(&lock);
     return out;
 }
@@ -338,6 +342,7 @@ add_remote_file(const file_meta_t *meta, file_state_t **file)
 {
     bool ok = false;
     int fd = -1;
+    int state_fd = -1;
 
     /* Concatenate directory path + file name */
     char file_path[MAX_PATH_LEN];
@@ -346,9 +351,17 @@ add_remote_file(const file_meta_t *meta, file_state_t **file)
         goto cleanup;
     }
 
+    /* Concatenate state dir path + file name */
+    /* TODO: Use file ID instead to prevent collisions */
+    char state_path[MAX_PATH_LEN];
+    if (!format_string(state_path, MAX_PATH_LEN, "%s/%s", get_state_dir(), meta->file_name)) {
+        debugf("State file name too long");
+        goto cleanup;
+    }
+
     /* Initialize file state struct */
     file_state_t state;
-    if (!create_file_state(meta, file_path, BS_DONT_HAVE, &state)) {
+    if (!create_file_state(meta, file_path, state_path, BS_DONT_HAVE, &state)) {
         debugf("Could not create file state");
         goto cleanup;
     }
@@ -361,17 +374,26 @@ add_remote_file(const file_meta_t *meta, file_state_t **file)
     }
 
     /* Expand it to the correct size */
-    if (ftruncate(fd, meta->block_size * meta->block_count) < 0) {
+    if (ftruncate(fd, meta->file_size) < 0) {
         debuge("Could not set file length");
         goto cleanup;
     }
 
     /* Create state file */
-    /* TODO */
+    state_fd = open(state.state_path, O_RDWR | O_CREAT | O_TRUNC, 0644);
+    if (state_fd < 0) {
+        debuge("Could not create state file");
+        goto cleanup;
+    }
 
     /* Add file to the tracker */
-    *file = add_file_to_tracker(&state);
+    *file = add_file_to_tracker(&state, fd, state_fd);
+    return true;
+
 cleanup:
+    if (state_fd >= 0) {
+        close(state_fd);
+    }
     if (fd >= 0) {
         close(fd);
     }
@@ -382,22 +404,56 @@ bool
 add_local_file(const char *file_path, file_state_t **file)
 {
     bool ok = false;
+    int fd = -1;
+    int state_fd = -1;
 
     /* Initialize metadata */
     file_meta_t meta;
     if (!create_file_meta(file_path, &meta)) {
         debugf("Failed to create file meta");
-        return false;
+        goto cleanup;
+    }
+
+    /* Concatenate state dir path + file name */
+    /* TODO: Use file ID instead to prevent collisions */
+    char state_path[MAX_PATH_LEN];
+    if (!format_string(state_path, MAX_PATH_LEN, "%s/%s", get_state_dir(), meta.file_name)) {
+        debugf("State file name too long");
+        goto cleanup;
     }
 
     /* Initialize file state struct */
     file_state_t state;
-    if (!create_file_state(&meta, file_path, BS_DONT_HAVE, &state)) {
+    if (!create_file_state(&meta, file_path, state_path, BS_DONT_HAVE, &state)) {
         debugf("Could not create file state");
         goto cleanup;
     }
 
+    /* Open (create) the local file */
+    fd = open(file_path, O_RDWR, 0644);
+    if (fd < 0) {
+        debuge("Could not open new file for writing");
+        goto cleanup;
+    }
+
+    /* Create state file */
+    state_fd = open(state.state_path, O_RDWR | O_CREAT | O_TRUNC, 0644);
+    if (state_fd < 0) {
+        debuge("Could not create state file");
+        goto cleanup;
+    }
+
+    /* Add file to tracker */
+    *file = add_file_to_tracker(&state, fd, state_fd);
+    return true;
+
 cleanup:
+    if (state_fd >= 0) {
+        close(state_fd);
+    }
+    if (fd >= 0) {
+        close(fd);
+    }
     return ok;
 }
 
@@ -422,9 +478,12 @@ initialize(void)
     struct dirent *entry;
     while ((entry = readdir(dp)) != NULL) {
         /* Skip non-state files */
+        /* TODO: Fix, we didn't append the ext to the filename yet */
+        /*
         if (!has_file_extension(entry->d_name, STATE_FILE_EXT)) {
             continue;
         }
+        */
 
         /* Concatenate dir path + file name */
         char state_file_path[MAX_PATH_LEN];
@@ -434,23 +493,43 @@ initialize(void)
         }
 
         /* Open state file */
-        int fd = open(state_file_path, O_RDWR, 0664);
-        if (fd < 0) {
+        int state_fd = open(state_file_path, O_RDWR, 0664);
+        if (state_fd < 0) {
             debuge("Could not open state file: %s", state_file_path);
             continue;
         }
 
         /* Read data into struct */
         file_state_t state;
-        if (!read_file_state(fd, &state)) {
+        if (!read_file_state(state_fd, &state)) {
             debugf("Failed to read file state");
-            close(fd);
+            close(state_fd);
             continue;
         }
 
+        /* Open file */
+        int fd = open(state.file_path, O_RDWR, 0644);
+        if (fd < 0) {
+            debuge("Could not open file: %s", state.file_path_len);
+            close(state_fd);
+        }
+
         /* Add file to tracker */
-        add_file_to_tracker(&state);
+        add_file_to_tracker(&state, fd, state_fd);
     }
+    return true;
+}
+
+bool
+flush(void)
+{
+    pthread_mutex_lock(&lock);
+    for (int i = 0; i < num_files; ++i) {
+        pthread_mutex_lock(&files[i].lock);
+        write_file_state(files[i].state_file_fd, &files[i]);
+        pthread_mutex_unlock(&files[i].lock);
+    }
+    pthread_mutex_unlock(&lock);
     return true;
 }
 
