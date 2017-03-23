@@ -149,6 +149,25 @@ starts_with(const char *str, const char *prefix)
     return strncmp(str, prefix, strlen(prefix)) == 0;
 }
 
+char *
+trim_string(char *str)
+{
+    while (*str && (*str == ' ' || *str == '\n')) {
+        str++;
+    }
+
+    size_t end = strlen(str);
+    if (end-- == 0) {
+        return str;
+    }
+
+    while (end >= 0 && (str[end] == ' ' || str[end] == '\n')) {
+        str[end--] = '\0';
+    }
+
+    return str;
+}
+
 bool
 get_file_name(char *out_name, const char *path, size_t *length)
 {

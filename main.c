@@ -13,33 +13,52 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <stdarg.h>
 
 static int
 usage(const char *name)
 {
-    printe("usage: %s <mode> <name>\n", name);
-    printe("  mode -- \"client\" or \"server\"\n");
-    printe("  name -- directory if server mode, file name if client mode\n");
+    printe("usage: %s <options>\n", name);
+    printe(" -c <path> -- config file path");
     return 1;
 }
 
 int
 main(int argc, char **argv)
 {
-    if (argc != 3) {
+    if (argc != 1) {
         return usage(argv[0]);
     }
 
-    const char *mode = argv[1];
-    const char *name = argv[2];
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t read;
+    while (true) {
+        printe("FTCP> ");
+        if ((read = getline(&line, &len, stdin)) < 0) {
+            break;
+        }
 
-    if (strcmp(mode, "server") == 0) {
-        add_directory(name);
-        server_run(8888);
-    } else if (strcmp(mode, "client") == 0) {
-        client_run("127.0.0.1", 8888, 8888, name);
+        char b[] = "";
+        trim_string(b);
+        char *cmd = trim_string(line);
+        if (starts_with(cmd, "download ")) {
+
+        } else if (starts_with(cmd, "upload ")) {
+
+        } else if (starts_with(cmd, "status ")) {
+
+        } else if (strcmp(cmd, "exit") == 0) {
+            break;
+        } else {
+            printe("Unknown command! Valid commands are:\n");
+            printe("> download 127.0.0.1[:8888] file.txt\n");
+            printe("> upload path/to/file.txt\n");
+            printe("> status file.txt\n");
+        }
     }
-    
-    while (1);
+
+    printe("Bye!\n");
+    free(line);
     return 0;
 }

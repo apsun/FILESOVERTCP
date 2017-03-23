@@ -90,6 +90,13 @@ bool
 starts_with(const char *str, const char *prefix);
 
 /**
+ * Removes leading and trailing spaces/newlines.
+ * Returns a pointer to the new start of the string.
+ */
+char *
+trim_string(char *str);
+
+/**
  * Gets the name (including file extension) of a file from
  * its full path. Returns true if the name fits in the output
  * buffer (and sets length to its length).
