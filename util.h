@@ -84,9 +84,15 @@ bool
 copy_string(char *dest, const char *src, size_t *length);
 
 /**
+ * Returns whether the string starts with the specified prefix.
+ */
+bool
+starts_with(const char *str, const char *prefix);
+
+/**
  * Gets the name (including file extension) of a file from
  * its full path. Returns true if the name fits in the output
- * buffer (and sets length to its length). 
+ * buffer (and sets length to its length).
  */
 bool
 get_file_name(char *out_name, const char *path, size_t *length);

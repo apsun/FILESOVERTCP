@@ -24,6 +24,7 @@
 static int num_files;
 static file_state_t files[MAX_NUM_FILES];
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+static const char *storage_dir;
 
 static uint64_t
 calculate_block_size(uint64_t file_size)
@@ -58,19 +59,12 @@ compute_sha256(uint64_t block_size, uint8_t *block_data)
 static file_id_t
 generate_file_id(void)
 {
+    /* Not quite a GUID, but close enough */
     file_id_t id;
     for (int i = 0; i < 16; ++i) {
         id.bytes[i] = rand() % 256;
     }
     return id;
-}
-
-static file_meta_t
-generate_file_meta(const char *file_path)
-{
-    /* TODO */
-    file_meta_t meta;
-    return meta;
 }
 
 static bool
@@ -80,6 +74,223 @@ set_block_status_impl(file_state_t *file, uint32_t index, block_status_t bs)
 
     file->block_status[index] = bs;
     return true;
+}
+
+static bool
+read_file_meta(int fd, file_meta_t *meta)
+{
+    uint32_t magic;
+    if (!read_all(fd, &magic, sizeof(magic)))
+        return false;
+
+    if (magic != FTCP_MAGIC)
+        return false;
+
+    if (!read_all(fd, &meta->id.bytes, sizeof(meta->id.bytes)))
+        return false;
+
+    if (!read_all(fd, &meta->file_name_len, sizeof(meta->file_name_len)))
+        return false;
+
+    if (meta->file_name_len > MAX_FILE_NAME_LEN)
+        return false;
+
+    if (!read_all(fd, meta->file_name, meta->file_name_len))
+        return false;
+
+    if (!read_all(fd, &meta->file_size, sizeof(meta->file_size)))
+        return false;
+
+    if (!read_all(fd, &meta->file_hash, sizeof(meta->file_hash)))
+        return false;
+
+    if (!read_all(fd, &meta->block_size, sizeof(meta->block_size)))
+        return false;
+
+    if (!read_all(fd, &meta->block_count, sizeof(meta->block_count)))
+        return false;
+
+    if (meta->block_count > MAX_NUM_BLOCKS)
+        return false;
+
+    /* WARNING: potentially unsafe reliance on padding */
+    if (!read_all(fd, meta->block_hashes, meta->block_count * sizeof(sha256_t)))
+        return false;
+
+    return true;
+}
+
+static bool
+write_file_meta(int fd, const file_meta_t *meta)
+{
+    uint32_t magic = FTCP_MAGIC;
+    if (!write_all(fd, &magic, sizeof(magic)))
+        return false;
+
+    if (!write_all(fd, &meta->id.bytes, sizeof(meta->id.bytes)))
+        return false;
+
+    if (!write_all(fd, &meta->file_name_len, sizeof(meta->file_name_len)))
+        return false;
+
+    if (!write_all(fd, meta->file_name, meta->file_name_len))
+        return false;
+
+    if (!write_all(fd, &meta->file_size, sizeof(meta->file_size)))
+        return false;
+
+    if (!write_all(fd, &meta->file_hash, sizeof(meta->file_hash)))
+        return false;
+
+    if (!write_all(fd, &meta->block_size, sizeof(meta->block_size)))
+        return false;
+
+    if (!write_all(fd, &meta->block_count, sizeof(meta->block_count)))
+        return false;
+
+    /* WARNING: potentially unsafe reliance on padding */
+    if (!write_all(fd, meta->block_hashes, meta->block_count * sizeof(sha256_t)))
+        return false;
+
+    return true;
+}
+
+static bool
+create_new_file_meta(const char *file_path, file_meta_t *meta)
+{
+    bool ok = false;
+    int fd = -1;
+    uint8_t *data = NULL;
+
+    /* Open file for reading */
+    if ((fd = open(file_path, O_RDONLY, 0664)) < 0) {
+        debuge("Failed to open file");
+        goto cleanup;
+    }
+
+    /* Generate file ID */
+    meta->id = generate_file_id();
+
+    /* Get file name */
+    size_t len = MAX_FILE_NAME_LEN;
+    if (!get_file_name(meta->file_name, file_path, &len)) {
+        debugf("Failed to copy file name -- too long?");
+        goto cleanup;
+    }
+    meta->file_name_len = len;
+
+    /* Get file size */
+    struct stat st;
+    if (fstat(fd, &st) < 0) {
+        debuge("Failed to stat file");
+        goto cleanup;
+    }
+    meta->file_size = st.st_size;
+
+    /* TODO: HASH ENTIRE FILE */
+    (void)meta->file_hash;
+
+    /* Calculate optimal block size */
+    meta->block_size = calculate_block_size(meta->file_size);
+
+    /* Total number of blocks */
+    meta->block_count = (meta->file_size + (meta->block_size - 1)) / meta->block_size;
+
+    /* Compute hashes for each block */
+    data = malloc(meta->block_size);
+    for (uint32_t i = 0; i < meta->block_count; ++i) {
+        if (!read_block(fd, data, meta->block_size, i * meta->block_size)) {
+            debugf("Failed to read block #%d", (i + 1));
+            goto cleanup;
+        }
+        meta->block_hashes[i] = compute_sha256(meta->block_size, data);
+    }
+
+    ok = true;
+
+cleanup:
+    free(data);
+    if (fd >= 0) {
+        close(fd);
+    }
+    return ok;
+}
+
+static bool
+read_file_state(int fd, file_state_t *state)
+{
+    uint32_t magic;
+    if (!read_all(fd, &magic, sizeof(magic)))
+        return false;
+
+    if (magic != FTCP_MAGIC)
+        return false;
+
+    uint32_t file_path_len;
+
+}
+
+static bool
+create_new_file_state(const char *file_path, file_state_t *state)
+{
+    /* Initialize metadata */
+    if (!create_new_file_meta(file_path, &file->meta)) {
+        debugf("Failed to create file meta");
+        return false;
+    }
+
+    /* Initialize block state list */
+    for (int i = 0; i < MAX_NUM_BLOCKS; ++i) {
+        file->block_status[i] = BS_DONT_HAVE;
+    }
+
+    /* Initialize peer list */
+    file->num_peers = 0;
+    for (int i = 0; i < MAX_NUM_PEERS; ++i) {
+        file->peer_list[i].ip_addr = 0;
+        file->peer_list[i].port = 0;
+    }
+
+
+}
+
+static bool
+add_file(file_state_t *file)
+{
+    bool ok = false;
+    pthread_mutex_lock(&lock);
+    if (num_files == MAX_NUM_FILES) {
+        debugf("Too many files open");
+    } else {
+        files[num_files++] = *file;
+        ok = true;
+    }
+    pthread_mutex_unlock(&lock);
+    return ok;
+}
+
+static bool
+add_new_file(const char *file_path)
+{
+    file_state_t file;
+    if (!create_new_file_state(file_path, &file)) {
+        debugf("Failed to create file state");
+        return false;
+    }
+
+    pthread_mutex_init(&file->lock, NULL);
+    file->meta = *meta;
+    file->file_fd = fd;
+    file->num_peers = 0;
+    for (int i = 0; i < MAX_NUM_BLOCKS; ++i) {
+        file->block_status[i] = BS_DONT_HAVE;
+    }
+    for (int i = 0; i < MAX_NUM_PEERS; ++i) {
+        file->peer_list[i].ip_addr = 0;
+        file->peer_list[i].port = 0;
+    }
+
+    add_file(file);
 }
 
 bool
@@ -100,75 +311,36 @@ add_directory(const char *dir_path)
         return false;
     }
 
-    pthread_mutex_lock(&lock);
     struct dirent *entry;
     while ((entry = readdir(dp)) != NULL) {
-        /* Skip current/parent directory entries */
-        if (strcmp(entry->d_name, ".") == 0 ||
-            strcmp(entry->d_name, "..") == 0) {
+        /* Skip non-state files */
+        if (!has_file_extension(entry->d_name, STATE_FILE_EXT)) {
             continue;
         }
 
-        /* Skip metadata and block info files */
-        if (has_file_extension(entry->d_name, META_FILE_EXT) ||
-            has_file_extension(entry->d_name, BLOCK_FILE_EXT)) {
+        /* Open state file */
+        char state_file_path[MAX_PATH_LEN];
+        if (snprintf(state_file_path, MAX_PATH_LEN, "%s/%s", dir_path, entry->d_name) >= MAX_PATH_LEN) {
+            debugf("File path too long");
             continue;
         }
-
-        /* Open file */
-        char file_path[4096];
-        sprintf(file_path, "%s/%s", dir_path, entry->d_name);
-        int fd = open(file_path, O_RDWR, 0664);
+        int fd = open(state_file_path, O_RDWR, 0664);
         if (fd < 0) {
-            debuge("Could not open file: %s", file_path);
+            debuge("Could not open state file: %s", state_file_path);
             continue;
         }
 
-        /* See if it already has a metadata file */
-        char meta_path[4096];
-        sprintf(meta_path, "%s%s", file_path, META_FILE_EXT);
-        int meta_fd = open(file_path, O_RDONLY, 0664);
-        if (meta_fd < 0) {
-            /* Generate and write a new metadata file */
+        /* Read data into struct */
+        file_state_t state;
+        if (!read_file_state(fd, &state)) {
+            debugf("Failed to read file state");
+            close(fd);
+            continue;
         }
 
-        /* See if it already has a block info file */
-        char block_path[4096];
-        sprintf(block_path, "%s%s", file_path, BLOCK_FILE_EXT);
-        int block_fd = open(block_path, O_RDWR, 0664);
-        if (block_fd < 0) {
-            /* Generate a new block info file */
-        }
-
-        files[num_files].file_fd = fd;
-
-        struct stat buf;
-        fstat(files[num_files].file_fd, &buf);
-        files[num_files].meta.magic = FTCP_MAGIC;
-        files[num_files].meta.file_name_len = strlen(entry->d_name) + 1;
-        files[num_files].meta.file_size = buf.st_size;
-        files[num_files].meta.block_size = calculate_block_size(files[num_files].meta.file_size);
-        files[num_files].meta.block_count = (files[num_files].meta.file_size % files[num_files].meta.block_size) ? (files[num_files].meta.file_size / files[num_files].meta.block_size) + 1 : (files[num_files].meta.file_size / files[num_files].meta.block_size);
-        //filelist[files].file_hash = ?
-        files[num_files].meta.id = generate_file_id();
-        for(size_t i = 0; i < files[num_files].meta.file_name_len; i++)
-        {
-            files[num_files].meta.file_name[i] = entry->d_name[i]; // gets the file name and sets it.
-        }
-        uint8_t * block_data = malloc(files[num_files].meta.block_size);
-        for(size_t i = 0; i < files[num_files].meta.block_count; i++)
-        {
-            //filelist[files].block_hashes[i] = ?; dont know how to hash.
-            off_t offset = files[num_files].meta.block_size * i;            
-            read_block(fd, block_data, files[num_files].meta.block_size, offset);
-            files[num_files].meta.block_hashes[i] = compute_sha256(files[num_files].meta.block_size, block_data);
-            files[num_files].block_status[i] = BS_HAVE; //we have everthing
-        }
-        free(block_data);
-        pthread_mutex_init(&files[num_files].lock, NULL);
-        num_files++;
+        /* Add file to tracker */
+        add_file(&state);
     }
-    pthread_mutex_unlock(&lock);
     return true;
 }
 
@@ -200,12 +372,6 @@ add_file(file_meta_t *meta)
 
     pthread_mutex_unlock(&lock);
     return file;
-}
-
-file_state_t *
-create_local_file(file_meta_t * meta)
-{
-    return add_file(meta);
 }
 
 bool

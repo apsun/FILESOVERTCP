@@ -17,6 +17,11 @@
 #define MAX_FILE_NAME_LEN 256
 
 /**
+ * Maximum length of a file path, including the NUL terminator.
+ */
+#define MAX_PATH_LEN 4096
+
+/**
  * Minimum size of a block, in bytes. Must be a power of 2.
  */
 #define MIN_BLOCK_SIZE 4096
@@ -39,12 +44,12 @@
 /**
  * Extension for metadata files.
  */
-#define META_FILE_EXT ".ftcp"
+#define META_FILE_EXT ".ftcpmeta"
 
 /**
  * Extension for block info files.
  */
-#define BLOCK_FILE_EXT ".fblk"
+#define STATE_FILE_EXT ".ftcpstate"
 
 /**
  * File ID structure
@@ -81,11 +86,6 @@ typedef enum {
  * File metadata structure
  */
 typedef struct {
-    /**
-     * FTCP magic bytes.
-     */
-    uint32_t magic;
-
     /**
      * Unique identifier of the file.
      */
@@ -133,11 +133,17 @@ typedef struct {
  * File state (mutable)
  */
 typedef struct {
-    /* File info */
-    file_meta_t meta;
+    /**********************************************/
+    /* Parts that actually go into the state file */
+    /**********************************************/
 
-    /* Lock for this file struct */
-    pthread_mutex_t lock;
+    /* Path to the file itself */
+    uint32_t file_path_len;
+    char file_path[MAX_PATH_LEN];
+
+    /* Path to the metadata file */
+    uint32_t meta_path_len;
+    char meta_path[MAX_PATH_LEN];
 
     /* Block info */
     block_status_t block_status[MAX_NUM_BLOCKS];
@@ -146,11 +152,21 @@ typedef struct {
     uint32_t num_peers;
     peer_info_t peer_list[MAX_NUM_PEERS];
 
-    /* File descriptor for the actual file */
+    /**********************************************/
+    /* Parts generated at runtime and not saved   */
+    /**********************************************/
+
+    /* File info */
+    file_meta_t meta;
+
+    /* Lock for this file struct */
+    pthread_mutex_t lock;
+
+    /* File descriptor for the transferred file */
     int file_fd;
 
-    /* File descriptor for the block status file */
-    int block_info_fd;
+    /* File descriptor for the state file */
+    int state_file_fd;
 } file_state_t;
 
 #endif

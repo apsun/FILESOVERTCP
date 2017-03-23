@@ -144,6 +144,12 @@ copy_string(char *dest, const char *src, size_t *length)
 }
 
 bool
+starts_with(const char *str, const char *prefix)
+{
+    return strncmp(str, prefix, strlen(prefix)) == 0;
+}
+
+bool
 get_file_name(char *out_name, const char *path, size_t *length)
 {
     char *s = strrchr(path, '/');

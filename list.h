@@ -68,7 +68,7 @@
  */
 #define list_grow_(l) do {                                                    \
     if ((l).size == (l).capacity) {                                           \
-        list_realloc_((l), list_max_((l).capacity * 2, 8));                  \
+        list_realloc_((l), list_max_((l).capacity * 2, 8));                   \
     }                                                                         \
 } while (0)
 
