@@ -3,6 +3,7 @@
 #include "file.h"
 #include "util.h"
 #include "type.h"
+#include "config.h"
 #include "cmd.h"
 #include "sha3.h"
 #include <stdio.h>
@@ -21,10 +22,20 @@
 #include <dirent.h>
 #include <sys/time.h>
 
+/**
+ * Number of active files (length of files list).
+ */
 static int num_files;
+
+/**
+ * List of active files.
+ */
 static file_state_t files[MAX_NUM_FILES];
+
+/**
+ * Lock for num_files and the files array.
+ */
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-static const char *storage_dir;
 
 static uint64_t
 calculate_block_size(uint64_t file_size)
@@ -67,25 +78,17 @@ generate_file_id(void)
     return id;
 }
 
-static bool
-set_block_status_impl(file_state_t *file, uint32_t index, block_status_t bs)
+static void
+file_id_to_string(const file_id_t *id, char str[32])
 {
-    /* TODO: Update the status of the block file on disk */
-
-    file->block_status[index] = bs;
-    return true;
+    for (size_t i = 0; i < 16; ++i) {
+        sprintf(str + 2 * i, "%02x", id->bytes[i]);
+    }
 }
 
 static bool
 read_file_meta(int fd, file_meta_t *meta)
 {
-    uint32_t magic;
-    if (!read_all(fd, &magic, sizeof(magic)))
-        return false;
-
-    if (magic != FTCP_MAGIC)
-        return false;
-
     if (!read_all(fd, &meta->id.bytes, sizeof(meta->id.bytes)))
         return false;
 
@@ -123,10 +126,6 @@ read_file_meta(int fd, file_meta_t *meta)
 static bool
 write_file_meta(int fd, const file_meta_t *meta)
 {
-    uint32_t magic = FTCP_MAGIC;
-    if (!write_all(fd, &magic, sizeof(magic)))
-        return false;
-
     if (!write_all(fd, &meta->id.bytes, sizeof(meta->id.bytes)))
         return false;
 
@@ -156,7 +155,82 @@ write_file_meta(int fd, const file_meta_t *meta)
 }
 
 static bool
-create_new_file_meta(const char *file_path, file_meta_t *meta)
+read_file_state(int fd, file_state_t *state)
+{
+    uint32_t magic;
+    if (!read_all(fd, &magic, sizeof(magic)))
+        return false;
+
+    if (magic != FTCP_MAGIC)
+        return false;
+
+    if (!read_file_meta(fd, &state->meta))
+        return false;
+
+    if (!read_all(fd, &state->file_path_len, sizeof(state->file_path_len)))
+        return false;
+
+    if (!read_all(fd, state->file_path, state->file_path_len))
+        return false;
+
+    if (!read_all(fd, &state->state_path_len, sizeof(state->state_path_len)))
+        return false;
+
+    if (!read_all(fd, state->state_path, state->state_path_len))
+        return false;
+
+    /* WARNING: potentially unsafe reliance on padding */
+    if (!read_all(fd, state->block_status, sizeof(block_status_t) * state->meta.block_count))
+        return false;
+
+    if (!read_all(fd, &state->num_peers, sizeof(state->num_peers)))
+        return false;
+
+    /* WARNING: potentially unsafe reliance on padding */
+    if (!read_all(fd, state->peer_list, sizeof(peer_info_t) * state->num_peers))
+        return false;
+
+    return true;
+}
+
+static bool
+write_file_state(int fd, const file_state_t *state)
+{
+    uint32_t magic = FTCP_MAGIC;
+    if (!write_all(fd, &magic, sizeof(magic)))
+        return false;
+
+    if (!write_file_meta(fd, &state->meta))
+        return false;
+
+    if (!write_all(fd, &state->file_path_len, sizeof(state->file_path_len)))
+        return false;
+
+    if (!write_all(fd, state->file_path, state->file_path_len))
+        return false;
+
+    if (!write_all(fd, &state->state_path_len, sizeof(state->state_path_len)))
+        return false;
+
+    if (!write_all(fd, state->state_path, state->state_path_len))
+        return false;
+
+    /* WARNING: potentially unsafe reliance on padding */
+    if (!write_all(fd, state->block_status, sizeof(block_status_t) * state->meta.block_count))
+        return false;
+
+    if (!write_all(fd, &state->num_peers, sizeof(state->num_peers)))
+        return false;
+
+    /* WARNING: potentially unsafe reliance on padding */
+    if (!write_all(fd, state->peer_list, sizeof(peer_info_t) * state->num_peers))
+        return false;
+
+    return true;
+}
+
+static bool
+create_file_meta(const char *file_path, file_meta_t *meta)
 {
     bool ok = false;
     int fd = -1;
@@ -217,97 +291,131 @@ cleanup:
 }
 
 static bool
-read_file_state(int fd, file_state_t *state)
-{
-    uint32_t magic;
-    if (!read_all(fd, &magic, sizeof(magic)))
-        return false;
-
-    if (magic != FTCP_MAGIC)
-        return false;
-
-    uint32_t file_path_len;
-
-}
-
-static bool
-create_new_file_state(const char *file_path, file_state_t *state)
+create_file_state(const file_meta_t *meta, const char *file_path, block_status_t bs, file_state_t *state)
 {
     /* Initialize metadata */
-    if (!create_new_file_meta(file_path, &file->meta)) {
+    state->meta = *meta;
+
+    /* Initialize file path */
+    size_t file_path_len = MAX_PATH_LEN;
+    if (!copy_string(state->file_path, file_path, &file_path_len)) {
+        debugf("Failed to copy file path");
+        return false;
+    }
+    state->file_path_len = file_path_len;
+
+    /* Initialize state file path */
+    size_t state_path_len = MAX_PATH_LEN;
+    /* TODO */
+
+    /* Initialize block state list */
+    for (int i = 0; i < MAX_NUM_BLOCKS; ++i) {
+        state->block_status[i] = bs;
+    }
+
+    /* Initialize peer list */
+    state->num_peers = 0;
+    for (int i = 0; i < MAX_NUM_PEERS; ++i) {
+        state->peer_list[i].ip_addr = 0;
+        state->peer_list[i].port = 0;
+    }
+
+    return true;
+}
+
+static file_state_t *
+add_file_to_tracker(file_state_t *file)
+{
+    pthread_mutex_lock(&lock);
+    file_state_t *out = &files[num_files++];
+    *out = *file;
+    pthread_mutex_unlock(&lock);
+    return out;
+}
+
+bool
+add_remote_file(const file_meta_t *meta, file_state_t **file)
+{
+    bool ok = false;
+    int fd = -1;
+
+    /* Concatenate directory path + file name */
+    char file_path[MAX_PATH_LEN];
+    if (!format_string(file_path, MAX_PATH_LEN, "%s/%s", get_download_dir(), meta->file_name)) {
+        debugf("File name too long");
+        goto cleanup;
+    }
+
+    /* Initialize file state struct */
+    file_state_t state;
+    if (!create_file_state(meta, file_path, BS_DONT_HAVE, &state)) {
+        debugf("Could not create file state");
+        goto cleanup;
+    }
+
+    /* Open (create) the local file */
+    fd = open(file_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) {
+        debuge("Could not open new file for writing");
+        goto cleanup;
+    }
+
+    /* Expand it to the correct size */
+    if (ftruncate(fd, meta->block_size * meta->block_count) < 0) {
+        debuge("Could not set file length");
+        goto cleanup;
+    }
+
+    /* Create state file */
+    /* TODO */
+
+    /* Add file to the tracker */
+    *file = add_file_to_tracker(&state);
+cleanup:
+    if (fd >= 0) {
+        close(fd);
+    }
+    return ok;
+}
+
+bool
+add_local_file(const char *file_path, file_state_t **file)
+{
+    bool ok = false;
+
+    /* Initialize metadata */
+    file_meta_t meta;
+    if (!create_file_meta(file_path, &meta)) {
         debugf("Failed to create file meta");
         return false;
     }
 
-    /* Initialize block state list */
-    for (int i = 0; i < MAX_NUM_BLOCKS; ++i) {
-        file->block_status[i] = BS_DONT_HAVE;
+    /* Initialize file state struct */
+    file_state_t state;
+    if (!create_file_state(&meta, file_path, BS_DONT_HAVE, &state)) {
+        debugf("Could not create file state");
+        goto cleanup;
     }
 
-    /* Initialize peer list */
-    file->num_peers = 0;
-    for (int i = 0; i < MAX_NUM_PEERS; ++i) {
-        file->peer_list[i].ip_addr = 0;
-        file->peer_list[i].port = 0;
-    }
-
-
-}
-
-static bool
-add_file(file_state_t *file)
-{
-    bool ok = false;
-    pthread_mutex_lock(&lock);
-    if (num_files == MAX_NUM_FILES) {
-        debugf("Too many files open");
-    } else {
-        files[num_files++] = *file;
-        ok = true;
-    }
-    pthread_mutex_unlock(&lock);
+cleanup:
     return ok;
 }
 
-static bool
-add_new_file(const char *file_path)
-{
-    file_state_t file;
-    if (!create_new_file_state(file_path, &file)) {
-        debugf("Failed to create file state");
-        return false;
-    }
-
-    pthread_mutex_init(&file->lock, NULL);
-    file->meta = *meta;
-    file->file_fd = fd;
-    file->num_peers = 0;
-    for (int i = 0; i < MAX_NUM_BLOCKS; ++i) {
-        file->block_status[i] = BS_DONT_HAVE;
-    }
-    for (int i = 0; i < MAX_NUM_PEERS; ++i) {
-        file->peer_list[i].ip_addr = 0;
-        file->peer_list[i].port = 0;
-    }
-
-    add_file(file);
-}
-
-bool
+void
 set_block_status(file_state_t *file, uint32_t index, block_status_t bs)
 {
     pthread_mutex_lock(&(file->lock));
-    bool ok = set_block_status_impl(file, index, bs);
+    file->block_status[index] = bs;
     pthread_mutex_unlock(&(file->lock));
-    return ok;
 }
 
 bool
-add_directory(const char *dir_path)
+initialize(void)
 {
-    DIR *dp = opendir(dir_path);
+    const char *state_dir = get_state_dir();
+    DIR *dp = opendir(state_dir);
     if (dp == NULL) {
-        debuge("Cannot open directory");
+        debuge("Cannot open state directory");
         return false;
     }
 
@@ -318,12 +426,14 @@ add_directory(const char *dir_path)
             continue;
         }
 
-        /* Open state file */
+        /* Concatenate dir path + file name */
         char state_file_path[MAX_PATH_LEN];
-        if (snprintf(state_file_path, MAX_PATH_LEN, "%s/%s", dir_path, entry->d_name) >= MAX_PATH_LEN) {
+        if (!format_string(state_file_path, MAX_PATH_LEN, "%s/%s", state_dir, entry->d_name)) {
             debugf("File path too long");
             continue;
         }
+
+        /* Open state file */
         int fd = open(state_file_path, O_RDWR, 0664);
         if (fd < 0) {
             debuge("Could not open state file: %s", state_file_path);
@@ -339,39 +449,9 @@ add_directory(const char *dir_path)
         }
 
         /* Add file to tracker */
-        add_file(&state);
+        add_file_to_tracker(&state);
     }
     return true;
-}
-
-file_state_t *
-add_file(file_meta_t *meta)
-{
-    int fd = open(meta->file_name, O_CREAT | O_RDWR, 0664);
-    if (fd < 0) {
-        debuge("Failed to open file: %s", meta->file_name);
-        return NULL;
-    }
-
-    pthread_mutex_lock(&lock);
-    file_state_t *file = &files[num_files++];
-
-    /* Initialize file structure */
-    pthread_mutex_init(&file->lock, NULL);
-    file->meta = *meta;
-    file->file_fd = fd;
-    file->num_peers = 0;
-    for (int i = 0; i < MAX_NUM_BLOCKS; ++i) {
-        file->block_status[i] = BS_DONT_HAVE;
-    }
-    for (int i = 0; i < MAX_NUM_PEERS; ++i) {
-        file->peer_list[i].ip_addr = 0;
-        file->peer_list[i].port = 0;
-    }
-    /* TODO: block_info_fd */
-
-    pthread_mutex_unlock(&lock);
-    return file;
 }
 
 bool
@@ -450,10 +530,10 @@ find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t * block_or
         uint32_t index = i / 8;
         uint32_t shift = i % 8;
         if ((block_bitmap[index] & (1 << shift)) != 0) {
-            bool ok = set_block_status_impl(file, i, BS_DOWNLOADING);
+            file->block_status[index] = BS_DOWNLOADING;
             *block_index = i;
             pthread_mutex_unlock(&file->lock);
-            return ok;
+            return true;
         }
     }
     pthread_mutex_unlock(&file->lock);

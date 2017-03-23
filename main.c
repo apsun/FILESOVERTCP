@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include "server.h"
 #include "client.h"
 #include "util.h"

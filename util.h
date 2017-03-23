@@ -21,6 +21,7 @@ do {                           \
     perror("");                \
 } while (0)
 
+
 /**
  * Prints the formatted message to stderr.
  */
@@ -88,6 +89,12 @@ copy_string(char *dest, const char *src, size_t *length);
  */
 bool
 starts_with(const char *str, const char *prefix);
+
+/**
+ * snprintf() wrapper that returns true on success.
+ */
+bool
+format_string(char *dest, size_t size, const char *fmt, ...);
 
 /**
  * Removes leading and trailing spaces/newlines.

@@ -6,31 +6,34 @@
 #include "type.h"
 
 /**
- * Sets the status of a block and flushes the changes
- * to disk. Returns true if the block file could be written.
+ * Adds a remote file for downloading.
  */
 bool
+add_remote_file(const file_meta_t *meta, file_state_t **file);
+
+/**
+ * Adds a local file for uploading.
+ */
+bool
+add_local_file(const char *file_path, file_state_t **file);
+
+/**
+ * Sets the status of a block.
+ */
+void
 set_block_status(file_state_t *file, uint32_t index, block_status_t bs);
 
 /**
- * Adds all the files in file_path and sets all the blocks as downloaded
- * Returns false if it can not open the directory.
+ * Initializes the file storage.
  */
 bool
-add_directory(const char *file_path);
+initialize(void);
 
 /**
- * Adds a file given the meta.
- * Returns a pointer to a filestate object.
+ * Flushes all dynamic state to disk.
  */
-file_state_t *
-add_file(file_meta_t *meta);
-
-/**
- * Creates a new local file and all its associated metadata files.
- */
-file_state_t *
-create_local_file(file_meta_t *meta);
+bool
+flush(void);
 
 /**
  * Gets a file by name. Returns true and writes out_file

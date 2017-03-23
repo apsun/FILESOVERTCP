@@ -252,10 +252,7 @@ client_get_block_data(client_state_t *state, uint32_t block_index)
     free(block_data);
 
     /* Mark block as completed */
-    if (!set_block_status(file, block_index, BS_HAVE)) {
-        debugf("Failed to mark block as completed");
-        return false;
-    }
+    set_block_status(file, block_index, BS_HAVE);
 
     debugf("GET_BLOCK_DATA successful (%u/%u)", block_index + 1, file->meta.block_count);
     return true;
@@ -399,7 +396,11 @@ client_worker_new_file(void *arg)
     }
 
     /* Write metadata to disk and add file to tracker */
-    file_state_t *file = create_local_file(&meta);
+    file_state_t *file;
+    if (!add_remote_file(&meta, &file)) {
+        debugf("Could not add new file");
+        goto cleanup;
+    }
 
     /* Enter client loop */
     state->u.file = file;

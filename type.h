@@ -42,14 +42,9 @@
 #define MAX_NUM_PEERS 100
 
 /**
- * Extension for metadata files.
- */
-#define META_FILE_EXT ".ftcpmeta"
-
-/**
  * Extension for block info files.
  */
-#define STATE_FILE_EXT ".ftcpstate"
+#define STATE_FILE_EXT ".ftcp"
 
 /**
  * File ID structure
@@ -133,17 +128,16 @@ typedef struct {
  * File state (mutable)
  */
 typedef struct {
-    /**********************************************/
-    /* Parts that actually go into the state file */
-    /**********************************************/
+    /* File info */
+    file_meta_t meta;
 
     /* Path to the file itself */
     uint32_t file_path_len;
     char file_path[MAX_PATH_LEN];
 
-    /* Path to the metadata file */
-    uint32_t meta_path_len;
-    char meta_path[MAX_PATH_LEN];
+    /* Path to the state file */
+    uint32_t state_path_len;
+    char state_path[MAX_PATH_LEN];
 
     /* Block info */
     block_status_t block_status[MAX_NUM_BLOCKS];
@@ -151,13 +145,6 @@ typedef struct {
     /* Peer list for this file */
     uint32_t num_peers;
     peer_info_t peer_list[MAX_NUM_PEERS];
-
-    /**********************************************/
-    /* Parts generated at runtime and not saved   */
-    /**********************************************/
-
-    /* File info */
-    file_meta_t meta;
 
     /* Lock for this file struct */
     pthread_mutex_t lock;

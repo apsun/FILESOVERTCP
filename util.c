@@ -149,6 +149,17 @@ starts_with(const char *str, const char *prefix)
     return strncmp(str, prefix, strlen(prefix)) == 0;
 }
 
+bool
+format_string(char *dest, size_t size, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    size_t num = vsnprintf(dest, size, fmt, args);
+    va_end(args);
+    fflush(stderr);
+    return num < size;
+}
+
 char *
 trim_string(char *str)
 {
@@ -156,11 +167,7 @@ trim_string(char *str)
         str++;
     }
 
-    size_t end = strlen(str);
-    if (end-- == 0) {
-        return str;
-    }
-
+    ssize_t end = (ssize_t)strlen(str) - 1;
     while (end >= 0 && (str[end] == ' ' || str[end] == '\n')) {
         str[end--] = '\0';
     }
