@@ -39,8 +39,6 @@ main(int argc, char **argv)
             break;
         }
 
-        char b[] = "";
-        trim_string(b);
         char *cmd = trim_string(line);
         if (starts_with(cmd, "download ")) {
 
