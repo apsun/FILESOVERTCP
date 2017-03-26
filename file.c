@@ -367,7 +367,7 @@ add_remote_file(const file_meta_t *meta, file_state_t **file)
     }
 
     /* Open (create) the local file */
-    fd = open(file_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    fd = open(file_path, O_RDWR | O_CREAT | O_TRUNC, 0644);
     if (fd < 0) {
         debuge("Could not open new file for writing");
         goto cleanup;
@@ -424,7 +424,7 @@ add_local_file(const char *file_path, file_state_t **file)
 
     /* Initialize file state struct */
     file_state_t state;
-    if (!create_file_state(&meta, file_path, state_path, BS_DONT_HAVE, &state)) {
+    if (!create_file_state(&meta, file_path, state_path, BS_HAVE, &state)) {
         debugf("Could not create file state");
         goto cleanup;
     }
