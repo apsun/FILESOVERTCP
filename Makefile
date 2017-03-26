@@ -9,9 +9,13 @@ all: $(OBJS)
 .PHONY: test
 test:
 	mkdir -p test
+	mkdir -p state
+	mkdir -p download
 	dd if=/dev/urandom of=test/a.bin bs=1M count=10
 
 .PHONY: clean
 clean:
 	rm -f *.o $(OUTPUT)
 	rm -rf test
+	rm -rf state
+	rm -rf download

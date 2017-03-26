@@ -65,13 +65,20 @@ bool
 get_block_data(file_state_t *file, uint32_t block_index, uint8_t *block_data);
 
 /**
+ * Returns whether we have successfully downloaded all blocks
+ * in the file.
+ */
+bool
+have_all_blocks(file_state_t *file);
+
+/**
  * Gets the index of a block that is not already downloaded
  * and has the corresponding bit set to 1 in the block bitmap.
  * Returns false if there is no such block. The returned block,
  * if any, has its status atomically set to BS_DOWNLOADING.
  */
 bool
-find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t * block_order, uint32_t *block_index);
+find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t *block_index);
 
 /**
  * Validates a downloaded block. Returns true iff the block data

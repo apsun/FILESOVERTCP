@@ -232,13 +232,12 @@ client_get_block_data(client_state_t *state, uint32_t block_index)
         return false;
     }
 
-    /* Check blok data against correct hash */
+    /* Check block data against correct hash */
     if (!check_block(file, block_index, block_data)) {
-        debugf("BAD HASH");
+        debugf("Block hash mismatch");
         free(block_data);
         return false;
     }
-
 
     /* Write block to disk */
     off_t offset = block_index * block_size;
@@ -263,28 +262,29 @@ client_loop(client_state_t *state)
 {
     file_state_t *file = state->u.file;
     uint8_t block_list[(MAX_NUM_BLOCKS + 7) / 8];
-    uint32_t * block_order = generate_random_block_order(file);
-    if(block_order == NULL)
-    {
-        return;
-    }
-    while (client_get_peer_list(state)) {
+    bool got_block = false;
+    while (!have_all_blocks(file) && client_get_peer_list(state)) {
+        /* Get server's block list */
         if (!client_get_block_list(state, block_list)) {
-            free(block_order);
             break;
         }
 
-        /* TODO: Break when we have all blocks */
-        /* TODO: Sleep after loop iteration */
+        /* Find out what we need */
         uint32_t block_index;
-        while (find_needed_block(file, block_list, block_order, &block_index)) {
+        while (find_needed_block(file, block_list, &block_index)) {
             if (!client_get_block_data(state, block_index)) {
                 peer_remove(file, state->server);
                 set_block_status(file, block_index, BS_DONT_HAVE);
-                free(block_order);
                 return;
             }
+            got_block = true;
         }
+
+        /* If server didn't have any new blocks, sleep a bit */
+        if (!got_block) {
+            sleep(15);
+        }
+        got_block = false;
     }
 }
 

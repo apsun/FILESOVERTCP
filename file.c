@@ -143,6 +143,9 @@ write_file_meta(int fd, const file_meta_t *meta)
     if (!write_all(fd, meta->block_hashes, meta->block_count * sizeof(sha256_t)))
         return false;
 
+    if (fsync(fd) < 0)
+        return false;
+
     return true;
 }
 
@@ -216,6 +219,9 @@ write_file_state(int fd, const file_state_t *state)
 
     /* WARNING: potentially unsafe reliance on padding */
     if (!write_all(fd, state->peer_list, sizeof(peer_info_t) * state->num_peers))
+        return false;
+
+    if (fsync(fd) < 0)
         return false;
 
     return true;
@@ -525,6 +531,7 @@ flush(void)
 {
     pthread_mutex_lock(&lock);
     for (int i = 0; i < num_files; ++i) {
+        printf("@@@@@@@@@@@@@");
         pthread_mutex_lock(&files[i].lock);
         write_file_state(files[i].state_file_fd, &files[i]);
         pthread_mutex_unlock(&files[i].lock);
@@ -597,19 +604,37 @@ exit:
 }
 
 bool
-find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t * block_order, uint32_t *block_index)
+have_all_blocks(file_state_t *file)
+{
+    pthread_mutex_lock(&file->lock);
+    bool ok = true;
+    uint32_t num_blocks = file->meta.block_count;
+    for (uint32_t i = 0; i < num_blocks; ++i) {
+        if (file->block_status[i] != BS_HAVE) {
+            ok = false;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&file->lock);
+    return ok;
+}
+
+bool
+find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t *block_index)
 {
     pthread_mutex_lock(&file->lock);
     uint32_t num_blocks = file->meta.block_count;
-    for (uint32_t j = 0; j < num_blocks; ++j) {
-        uint32_t i = block_order[j];
+    for (uint32_t i = 0; i < num_blocks; ++i) {
+        /* Find a block we need */
         if (file->block_status[i] != BS_DONT_HAVE) {
             continue;
         }
+
+        /* Check if server has that block */
         uint32_t index = i / 8;
         uint32_t shift = i % 8;
         if ((block_bitmap[index] & (1 << shift)) != 0) {
-            file->block_status[index] = BS_DOWNLOADING;
+            file->block_status[i] = BS_DOWNLOADING;
             *block_index = i;
             pthread_mutex_unlock(&file->lock);
             return true;
