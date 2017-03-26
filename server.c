@@ -83,6 +83,7 @@ server_handle_get_file_meta(server_state_t *state)
     }
 
     /* Write response */
+    /* TODO: Unsafe reliance on padding */
     if (!cmd_write(fd, &file->meta, sizeof(file->meta))) {
         debugf("Failed to write file meta");
         return false;

@@ -79,6 +79,7 @@ main(int argc, char **argv)
         }
     }
 
+    flush();
     printe("Bye!\n");
     free(line);
     return 0;

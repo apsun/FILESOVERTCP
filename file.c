@@ -81,6 +81,9 @@ generate_file_id(void)
 static bool
 read_file_meta(int fd, file_meta_t *meta)
 {
+    /* Clear out state */
+    memset(meta, 0, sizeof(*meta));
+
     if (!read_all(fd, &meta->id.bytes, sizeof(meta->id.bytes)))
         return false;
 
@@ -152,6 +155,9 @@ write_file_meta(int fd, const file_meta_t *meta)
 static bool
 read_file_state(int fd, file_state_t *state)
 {
+    /* Clear out state */
+    memset(state, 0, sizeof(*state));
+
     uint32_t magic;
     if (!read_all(fd, &magic, sizeof(magic)))
         return false;
@@ -245,11 +251,12 @@ create_file_meta(const char *file_path, file_meta_t *meta)
 
     /* Get file name */
     size_t len = MAX_FILE_NAME_LEN;
+    memset(meta->file_name, 0, sizeof(meta->file_name));
     if (!get_file_name(meta->file_name, file_path, &len)) {
         debugf("Failed to copy file name -- too long?");
         goto cleanup;
     }
-    meta->file_name_len = len;
+    meta->file_name_len = len + 1;
 
     /* Get file size */
     struct stat st;
@@ -260,7 +267,9 @@ create_file_meta(const char *file_path, file_meta_t *meta)
     meta->file_size = st.st_size;
 
     /* TODO: HASH ENTIRE FILE */
-    (void)meta->file_hash;
+    for (int i = 0; i < 32; ++i) {
+        meta->file_hash.digest[i] = 0;
+    }
 
     /* Calculate optimal block size */
     meta->block_size = calculate_block_size(meta->file_size);
@@ -301,19 +310,21 @@ create_file_state(
 
     /* Initialize file path */
     size_t file_path_len = MAX_PATH_LEN;
+    memset(state->file_path, 0, sizeof(state->file_path));
     if (!copy_string(state->file_path, file_path, &file_path_len)) {
         debugf("Failed to copy file path");
         return false;
     }
-    state->file_path_len = file_path_len;
+    state->file_path_len = file_path_len + 1;
 
     /* Initialize state file path */
     size_t state_path_len = MAX_PATH_LEN;
+    memset(state->state_path, 0, sizeof(state->state_path));
     if (!copy_string(state->state_path, state_path, &state_path_len)) {
         debugf("Failed to copy state file path");
         return false;
     }
-    state->state_path_len = state_path_len;
+    state->state_path_len = state_path_len + 1;
 
     /* Initialize block state list */
     for (int i = 0; i < MAX_NUM_BLOCKS; ++i) {
@@ -362,6 +373,12 @@ add_remote_file(const file_meta_t *meta, file_state_t **file)
     char state_path[MAX_PATH_LEN];
     if (!format_string(state_path, MAX_PATH_LEN, "%s/%s", get_state_dir(), meta->file_name)) {
         debugf("State file name too long");
+        goto cleanup;
+    }
+
+    /* Check if state file already exists */
+    if (access(state_path, F_OK) >= 0) {
+        debugf("State file already exists");
         goto cleanup;
     }
 
@@ -428,6 +445,12 @@ add_local_file(const char *file_path, file_state_t **file)
         goto cleanup;
     }
 
+    /* Check if state file already exists */
+    if (access(state_path, F_OK) >= 0) {
+        debugf("State file already exists");
+        goto cleanup;
+    }
+
     /* Initialize file state struct */
     file_state_t state;
     if (!create_file_state(&meta, file_path, state_path, BS_HAVE, &state)) {
@@ -483,6 +506,12 @@ initialize(void)
 
     struct dirent *entry;
     while ((entry = readdir(dp)) != NULL) {
+        /* Skip current/parent dir entries */
+        if (strcmp(".", entry->d_name) == 0 ||
+            strcmp("..", entry->d_name) == 0) {
+            continue;
+        }
+
         /* Skip non-state files */
         /* TODO: Fix, we didn't append the ext to the filename yet */
         /*
@@ -516,13 +545,15 @@ initialize(void)
         /* Open file */
         int fd = open(state.file_path, O_RDWR, 0644);
         if (fd < 0) {
-            debuge("Could not open file: %s", state.file_path_len);
+            debuge("Could not open file: %s", state.file_path);
             close(state_fd);
         }
 
         /* Add file to tracker */
         add_file_to_tracker(&state, fd, state_fd);
     }
+
+    closedir(dp);
     return true;
 }
 
@@ -531,7 +562,6 @@ flush(void)
 {
     pthread_mutex_lock(&lock);
     for (int i = 0; i < num_files; ++i) {
-        printf("@@@@@@@@@@@@@");
         pthread_mutex_lock(&files[i].lock);
         write_file_state(files[i].state_file_fd, &files[i]);
         pthread_mutex_unlock(&files[i].lock);

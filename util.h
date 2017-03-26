@@ -6,6 +6,10 @@
 #include <stdbool.h>
 #include <sys/types.h>
 
+#define DEBUG 1
+
+#if DEBUG
+
 #define debugf(...)            \
 do {                           \
     printe("[%s:%u] %s: ", __FILE__, __LINE__, __func__); \
@@ -21,6 +25,12 @@ do {                           \
     perror("");                \
 } while (0)
 
+#else
+
+#define debugf(...) (void)0
+#define debuge(...) (void)0
+
+#endif
 
 /**
  * Prints the formatted message to stderr.
