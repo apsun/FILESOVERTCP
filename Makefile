@@ -9,8 +9,6 @@ all: $(OBJS)
 .PHONY: test
 test:
 	mkdir -p test
-	mkdir -p state
-	mkdir -p download
 	dd if=/dev/urandom of=test/a.bin bs=1M count=100
 
 .PHONY: clean

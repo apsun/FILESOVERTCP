@@ -306,8 +306,7 @@ client_connect(client_state_t *state)
 
     /* Optimization */
     int i = 1;
-    setsockopt( sockfd, IPPROTO_TCP, TCP_NODELAY, (void *)&i, sizeof(i));
-
+    setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (void *)&i, sizeof(i));
 
     /* Connection successful! */
     debugf("Connected to %s:%d", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));

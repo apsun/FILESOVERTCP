@@ -51,13 +51,22 @@ calculate_block_size(uint64_t file_size)
 static bool
 file_id_equals(const file_id_t *a, const file_id_t *b)
 {
-    return memcmp(a, b, sizeof(file_id_t)) == 0;
+    return memcmp(a->bytes, b->bytes, sizeof(a->bytes)) == 0;
 }
 
 static bool
 sha256_equals(const sha256_t *a, const sha256_t *b)
 {
-    return memcmp(a, b, sizeof(sha256_t)) == 0;
+    return memcmp(a->digest, b->digest, sizeof(a->digest)) == 0;
+}
+
+static char *
+file_id_to_str(const file_id_t *id, char buf[33])
+{
+    for (int i = 0; i < 16; ++i) {
+        sprintf(buf + 2 * i, "%02x", id->bytes[i]);
+    }
+    return buf;
 }
 
 static sha256_t
@@ -211,10 +220,13 @@ add_remote_file(const file_meta_t *meta, file_state_t **file)
         goto cleanup;
     }
 
-    /* Concatenate state dir path + file name */
-    /* TODO: Use file ID instead to prevent collisions */
+    /* Convert file ID to hex string */
+    char id_str[33];
+    file_id_to_str(&meta->id, id_str);
+
+    /* Concatenate state dir path + file name + extension */
     char state_path[MAX_PATH_LEN];
-    if (!format_string(state_path, MAX_PATH_LEN, "%s/%s", get_state_dir(), meta->file_name)) {
+    if (!format_string(state_path, MAX_PATH_LEN, "%s/%s%s", get_state_dir(), id_str, STATE_FILE_EXT)) {
         debugf("State file name too long");
         goto cleanup;
     }
@@ -280,10 +292,13 @@ add_local_file(const char *file_path, file_state_t **file)
         goto cleanup;
     }
 
-    /* Concatenate state dir path + file name */
-    /* TODO: Use file ID instead to prevent collisions */
+    /* Convert file ID to hex string */
+    char id_str[33];
+    file_id_to_str(&meta.id, id_str);
+
+    /* Concatenate state dir path + file name + extension */
     char state_path[MAX_PATH_LEN];
-    if (!format_string(state_path, MAX_PATH_LEN, "%s/%s", get_state_dir(), meta.file_name)) {
+    if (!format_string(state_path, MAX_PATH_LEN, "%s/%s%s", get_state_dir(), id_str, STATE_FILE_EXT)) {
         debugf("State file name too long");
         goto cleanup;
     }
@@ -341,6 +356,14 @@ bool
 initialize(void)
 {
     const char *state_dir = get_state_dir();
+    const char *dl_dir = get_download_dir();
+
+    /* Create the state + download dirs at startup */
+    /* TODO: May need to recursively create */
+    mkdir(state_dir, 0755);
+    mkdir(dl_dir, 0755);
+
+    /* Open and read state files in state dir */
     DIR *dp = opendir(state_dir);
     if (dp == NULL) {
         debuge("Cannot open state directory");
@@ -349,19 +372,10 @@ initialize(void)
 
     struct dirent *entry;
     while ((entry = readdir(dp)) != NULL) {
-        /* Skip current/parent dir entries */
-        if (strcmp(".", entry->d_name) == 0 ||
-            strcmp("..", entry->d_name) == 0) {
-            continue;
-        }
-
-        /* Skip non-state files */
-        /* TODO: Fix, we didn't append the ext to the filename yet */
-        /*
+        /* Skip entries w/o our extension */
         if (!has_file_extension(entry->d_name, STATE_FILE_EXT)) {
             continue;
         }
-        */
 
         /* Concatenate dir path + file name */
         char state_file_path[MAX_PATH_LEN];

@@ -357,9 +357,9 @@ server_thread(void *arg)
             continue;
         }
 
-        /* Optimization*/
+        /* Optimization */
         int i = 1;
-        setsockopt( asockfd, IPPROTO_TCP, TCP_NODELAY, (void *)&i, sizeof(i));
+        setsockopt(asockfd, IPPROTO_TCP, TCP_NODELAY, (void *)&i, sizeof(i));
 
         /* Connection successful! */
         debugf("Got connection from %s:%d", inet_ntoa(caddr.sin_addr), ntohs(caddr.sin_port));
