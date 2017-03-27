@@ -6,6 +6,7 @@
 #include "config.h"
 #include "cmd.h"
 #include "sha3.h"
+#include "io.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -76,161 +77,6 @@ generate_file_id(void)
         id.bytes[i] = rand() % 256;
     }
     return id;
-}
-
-static bool
-read_file_meta(int fd, file_meta_t *meta)
-{
-    /* Clear out state */
-    memset(meta, 0, sizeof(*meta));
-
-    if (!read_all(fd, &meta->id.bytes, sizeof(meta->id.bytes)))
-        return false;
-
-    if (!read_all(fd, &meta->file_name_len, sizeof(meta->file_name_len)))
-        return false;
-
-    if (meta->file_name_len > MAX_FILE_NAME_LEN)
-        return false;
-
-    if (!read_all(fd, meta->file_name, meta->file_name_len))
-        return false;
-
-    if (!read_all(fd, &meta->file_size, sizeof(meta->file_size)))
-        return false;
-
-    if (!read_all(fd, &meta->file_hash, sizeof(meta->file_hash)))
-        return false;
-
-    if (!read_all(fd, &meta->block_size, sizeof(meta->block_size)))
-        return false;
-
-    if (!read_all(fd, &meta->block_count, sizeof(meta->block_count)))
-        return false;
-
-    if (meta->block_count > MAX_NUM_BLOCKS)
-        return false;
-
-    /* WARNING: potentially unsafe reliance on padding */
-    if (!read_all(fd, meta->block_hashes, meta->block_count * sizeof(sha256_t)))
-        return false;
-
-    return true;
-}
-
-static bool
-write_file_meta(int fd, const file_meta_t *meta)
-{
-    if (!write_all(fd, &meta->id.bytes, sizeof(meta->id.bytes)))
-        return false;
-
-    if (!write_all(fd, &meta->file_name_len, sizeof(meta->file_name_len)))
-        return false;
-
-    if (!write_all(fd, meta->file_name, meta->file_name_len))
-        return false;
-
-    if (!write_all(fd, &meta->file_size, sizeof(meta->file_size)))
-        return false;
-
-    if (!write_all(fd, &meta->file_hash, sizeof(meta->file_hash)))
-        return false;
-
-    if (!write_all(fd, &meta->block_size, sizeof(meta->block_size)))
-        return false;
-
-    if (!write_all(fd, &meta->block_count, sizeof(meta->block_count)))
-        return false;
-
-    /* WARNING: potentially unsafe reliance on padding */
-    if (!write_all(fd, meta->block_hashes, meta->block_count * sizeof(sha256_t)))
-        return false;
-
-    if (fsync(fd) < 0)
-        return false;
-
-    return true;
-}
-
-static bool
-read_file_state(int fd, file_state_t *state)
-{
-    /* Clear out state */
-    memset(state, 0, sizeof(*state));
-
-    uint32_t magic;
-    if (!read_all(fd, &magic, sizeof(magic)))
-        return false;
-
-    if (magic != FTCP_MAGIC)
-        return false;
-
-    if (!read_file_meta(fd, &state->meta))
-        return false;
-
-    if (!read_all(fd, &state->file_path_len, sizeof(state->file_path_len)))
-        return false;
-
-    if (!read_all(fd, state->file_path, state->file_path_len))
-        return false;
-
-    if (!read_all(fd, &state->state_path_len, sizeof(state->state_path_len)))
-        return false;
-
-    if (!read_all(fd, state->state_path, state->state_path_len))
-        return false;
-
-    /* WARNING: potentially unsafe reliance on padding */
-    if (!read_all(fd, state->block_status, sizeof(block_status_t) * state->meta.block_count))
-        return false;
-
-    if (!read_all(fd, &state->num_peers, sizeof(state->num_peers)))
-        return false;
-
-    /* WARNING: potentially unsafe reliance on padding */
-    if (!read_all(fd, state->peer_list, sizeof(peer_info_t) * state->num_peers))
-        return false;
-
-    return true;
-}
-
-static bool
-write_file_state(int fd, const file_state_t *state)
-{
-    uint32_t magic = FTCP_MAGIC;
-    if (!write_all(fd, &magic, sizeof(magic)))
-        return false;
-
-    if (!write_file_meta(fd, &state->meta))
-        return false;
-
-    if (!write_all(fd, &state->file_path_len, sizeof(state->file_path_len)))
-        return false;
-
-    if (!write_all(fd, state->file_path, state->file_path_len))
-        return false;
-
-    if (!write_all(fd, &state->state_path_len, sizeof(state->state_path_len)))
-        return false;
-
-    if (!write_all(fd, state->state_path, state->state_path_len))
-        return false;
-
-    /* WARNING: potentially unsafe reliance on padding */
-    if (!write_all(fd, state->block_status, sizeof(block_status_t) * state->meta.block_count))
-        return false;
-
-    if (!write_all(fd, &state->num_peers, sizeof(state->num_peers)))
-        return false;
-
-    /* WARNING: potentially unsafe reliance on padding */
-    if (!write_all(fd, state->peer_list, sizeof(peer_info_t) * state->num_peers))
-        return false;
-
-    if (fsync(fd) < 0)
-        return false;
-
-    return true;
 }
 
 static bool
@@ -534,9 +380,16 @@ initialize(void)
             continue;
         }
 
+        /* Check magic bytes */
+        if (!read_magic(read_all, state_fd)) {
+            debugf("Magic mismatch");
+            close(state_fd);
+            continue;
+        }
+
         /* Read data into struct */
         file_state_t state;
-        if (!read_file_state(state_fd, &state)) {
+        if (!read_file_state(read_all, state_fd, &state)) {
             debugf("Failed to read file state");
             close(state_fd);
             continue;
@@ -563,7 +416,9 @@ flush(void)
     pthread_mutex_lock(&lock);
     for (int i = 0; i < num_files; ++i) {
         pthread_mutex_lock(&files[i].lock);
-        write_file_state(files[i].state_file_fd, &files[i]);
+        write_magic(write_all, files[i].state_file_fd);
+        write_file_state(write_all, files[i].state_file_fd, &files[i]);
+        fsync(files[i].state_file_fd);
         pthread_mutex_unlock(&files[i].lock);
     }
     pthread_mutex_unlock(&lock);
@@ -677,9 +532,9 @@ find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t *block_ind
 bool
 check_block(file_state_t *file, uint32_t block_index, uint8_t *block_data)
 {
-    sha256_t checksum = compute_sha256(file->meta.block_size, block_data);
+    sha256_t hash = compute_sha256(file->meta.block_size, block_data);
     sha256_t expected = file->meta.block_hashes[block_index];
-    return sha256_equals(&checksum, &expected);
+    return sha256_equals(&hash, &expected);
 }
 
 uint32_t *

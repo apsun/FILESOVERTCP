@@ -4,6 +4,7 @@
 #include "cmd.h"
 #include "file.h"
 #include "peer.h"
+#include "io.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -55,7 +56,7 @@ client_get_peer_list(client_state_t *state)
 
     /* Write file ID */
     file_id_t id = file->meta.id;
-    if (!cmd_write(fd, &id, sizeof(id))) {
+    if (!write_file_id(cmd_write, fd, &id)) {
         debugf("Failed to write file ID");
         return false;
     }
@@ -89,16 +90,8 @@ client_get_peer_list(client_state_t *state)
     /* Read each peer */
     for (uint32_t i = 0; i < num_peers; ++i) {
         peer_info_t peer;
-
-        /* Read peer IP */
-        if (!cmd_read(fd, &peer.ip_addr, sizeof(peer.ip_addr))) {
-            debugf("Failed to read peer IP address");
-            return false;
-        }
-
-        /* Read peer port */
-        if (!cmd_read(fd, &peer.port, sizeof(peer.port))) {
-            debugf("Failed to read peer port");
+        if (!read_peer(cmd_read, fd, &peer)) {
+            debugf("Failed to read peer");
             return false;
         }
 
@@ -144,7 +137,7 @@ client_get_block_list(client_state_t *state, uint8_t block_bitmap[(MAX_NUM_BLOCK
 
     /* Write file ID */
     file_id_t id = file->meta.id;
-    if (!cmd_write(fd, &id, sizeof(id))) {
+    if (!write_file_id(cmd_write, fd, &id)) {
         debugf("Failed to write file ID");
         return false;
     }
@@ -193,7 +186,7 @@ client_get_block_data(client_state_t *state, uint32_t block_index)
 
     /* Write file ID */
     file_id_t id = file->meta.id;
-    if (!cmd_write(fd, &id, sizeof(id))) {
+    if (!write_file_id(cmd_write, fd, &id)) {
         debugf("Failed to write file ID");
         return false;
     }
@@ -319,24 +312,17 @@ client_connect(client_state_t *state)
     /* Connection successful! */
     debugf("Connected to %s:%d", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
 
-    /* Write and the magic bytes */
-    uint32_t magic = FTCP_MAGIC;
-    if (!cmd_write(sockfd, &magic, sizeof(magic))) {
+    /* Write the magic bytes */
+    if (!write_magic(cmd_write, sockfd)) {
         debugf("Failed to write FTCP_MAGIC");
         close(sockfd);
         return false;
     }
 
-    /* Read magic from server */
-    if (!cmd_read(sockfd, &magic, sizeof(magic))) {
+    /* Read response magic bytes */
+    if (!read_magic(cmd_read, sockfd)) {
         debugf("Failed to read FTCP_MAGIC");
         close(sockfd);
-        return false;
-    }
-
-    /* Check magic match */
-    if (magic != FTCP_MAGIC) {
-        debugf("Magic mismatch, expected FTCP_MAGIC, got 0x%08x", magic);
         return false;
     }
 
@@ -363,14 +349,8 @@ client_worker_new_file(void *arg)
     const char *str = state->u.file_name;
     uint32_t len = strlen(str) + 1;
 
-    /* Write string length */
-    if (!cmd_write(fd, &len, sizeof(len))) {
-        debugf("Failed to write string length");
-        goto cleanup;
-    }
-
-    /* Write string contents */
-    if (!cmd_write(fd, str, len)) {
+    /* Write string */
+    if (!write_string(cmd_write, fd, str, len)) {
         debugf("Failed to write string");
         goto cleanup;
     }
@@ -390,7 +370,7 @@ client_worker_new_file(void *arg)
 
     /* Read the metadata */
     file_meta_t meta;
-    if (!cmd_read(fd, &meta, sizeof(meta))) {
+    if (!read_file_meta(cmd_read, fd, &meta)) {
         debugf("Failed to read file metadata");
         goto cleanup;
     }

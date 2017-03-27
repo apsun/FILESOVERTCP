@@ -32,58 +32,12 @@ do {                           \
 
 #endif
 
+
 /**
  * Prints the formatted message to stderr.
  */
 void
 printe(const char *fmt, ...);
-
-/**
- * Like write_all(), but doesn't cause a SIGPIPE when
- * writing to broken pipes. Only works on socket files.
- */
-bool
-send_all(int sockfd, const void *buf, size_t count);
-
-/**
- * Like read_all(), but only works on socket files.
- */
-bool
-recv_all(int sockfd, void *buf, size_t count);
-
-/**
- * Writes count bytes from buf to the specified file.
- * Only returns once count bytes have been written, or
- * a write fails.
- */
-bool
-write_all(int fd, const void *buf, size_t count);
-
-/**
- * Reads count bytes from the specified file into buf.
- * Only returns once count bytes have been read, or
- * a read fails.
- */
-bool
-read_all(int fd, void *buf, size_t count);
-
-/**
- * Writes count bytes from buf to the specified file
- * at the given file offset. Returns true if all bytes
- * could be written, false otherwise.
- */
-bool
-write_block(int fd, const void *buf, size_t count, off_t file_offset);
-
-/**
- * Reads count bytes from the specified file into buf
- * at the given file offset. Returns true if all bytes
- * could be read, false otherwise. If EOF is reached before
- * count bytes are read, the remainder of buf is filled
- * with 0s and true is returned.
- */
-bool
-read_block(int fd, void *buf, size_t count, off_t file_offset);
 
 /**
  * Similar to strncpy. Returns true iff all chars (including

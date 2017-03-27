@@ -1,5 +1,6 @@
 #include "cmd.h"
 #include "util.h"
+#include "io.h"
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
