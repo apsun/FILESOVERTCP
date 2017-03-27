@@ -36,6 +36,12 @@ bool
 flush(void);
 
 /**
+ * Closes all files. Call this at application shutdown.
+ */
+bool
+finalize(void);
+
+/**
  * Gets a file by name. Returns true and writes out_file
  * if the file exists, and returns false otherwise.
  */

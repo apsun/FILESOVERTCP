@@ -97,7 +97,6 @@ create_file_meta(const char *file_path, file_meta_t *meta)
 
     /* Get file name */
     size_t len = MAX_FILE_NAME_LEN;
-    memset(meta->file_name, 0, sizeof(meta->file_name));
     if (!get_file_name(meta->file_name, file_path, &len)) {
         debugf("Failed to copy file name -- too long?");
         goto cleanup;
@@ -156,7 +155,6 @@ create_file_state(
 
     /* Initialize file path */
     size_t file_path_len = MAX_PATH_LEN;
-    memset(state->file_path, 0, sizeof(state->file_path));
     if (!copy_string(state->file_path, file_path, &file_path_len)) {
         debugf("Failed to copy file path");
         return false;
@@ -165,7 +163,6 @@ create_file_state(
 
     /* Initialize state file path */
     size_t state_path_len = MAX_PATH_LEN;
-    memset(state->state_path, 0, sizeof(state->state_path));
     if (!copy_string(state->state_path, state_path, &state_path_len)) {
         debugf("Failed to copy state file path");
         return false;
@@ -419,6 +416,23 @@ flush(void)
         write_magic(write_all, files[i].state_file_fd);
         write_file_state(write_all, files[i].state_file_fd, &files[i]);
         fsync(files[i].state_file_fd);
+        fsync(files[i].file_fd);
+        pthread_mutex_unlock(&files[i].lock);
+    }
+    pthread_mutex_unlock(&lock);
+    return true;
+}
+
+bool
+finalize(void)
+{
+    pthread_mutex_lock(&lock);
+    for (int i = 0; i < num_files; ++i) {
+        pthread_mutex_lock(&files[i].lock);
+        close(files[i].state_file_fd);
+        close(files[i].file_fd);
+        files[i].state_file_fd = -1;
+        files[i].file_fd = -1;
         pthread_mutex_unlock(&files[i].lock);
     }
     pthread_mutex_unlock(&lock);
