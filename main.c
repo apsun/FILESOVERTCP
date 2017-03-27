@@ -76,6 +76,7 @@ main(int argc, char **argv)
             printe("> download file.txt\n");
             printe("> upload path/to/file.txt\n");
             printe("> status file.txt\n");
+            printe("> exit\n");
         }
     }
 
