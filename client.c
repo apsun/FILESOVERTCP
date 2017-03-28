@@ -381,6 +381,9 @@ client_worker_new_file(void *arg)
         goto cleanup;
     }
 
+    /* Add the server we just connected to inot the peer list */
+    peer_add(file, state->server);
+
     /* Enter client loop */
     state->u.file = file;
     client_loop(state);
@@ -430,6 +433,32 @@ client_run(const char *ip_addr, uint16_t port, uint16_t server_port, const char 
 
     pthread_t thread;
     if (pthread_create(&thread, NULL, client_worker_new_file, state) < 0) {
+        debuge("Failed to create client thread");
+        return false;
+    }
+
+    if (pthread_detach(thread) < 0) {
+        debuge("Failed to detach client thread");
+    }
+
+    debugf("Started client thread");
+    return true;
+}
+
+
+bool
+client_resume(peer_info_t peerinfo, uint16_t server_port, file_state_t * file)
+{
+    client_state_t *state = malloc(sizeof(client_state_t));
+    state->server = peerinfo;
+    printf("IP NUMBER THING TEMP: %x\n", peerinfo.ip_addr);
+    printf("PORT NUMBER THING TEMP: %d\n", peerinfo.port);
+    state->u.file = file;
+    state->sockfd = -1;
+    state->port = server_port;
+
+    pthread_t thread;
+    if (pthread_create(&thread, NULL, client_worker, state) < 0) {
         debuge("Failed to create client thread");
         return false;
     }

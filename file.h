@@ -55,6 +55,20 @@ get_file_by_name(const char *file_name, file_state_t **out_file);
 bool
 get_file_by_id(const file_id_t *id, file_state_t **out_file);
 
+
+/**
+ * Gets a file by its index. Returns true and writes out_file
+ * if the file exists, and returns false otherwise.
+ */
+bool
+get_file_by_index(int index, file_state_t **out_file);
+
+/**
+ * Returns the num of files
+ */
+int
+get_num_files();
+
 /**
  * Gets the block status list for a particular file. Returns
  * the number of blocks in the list.

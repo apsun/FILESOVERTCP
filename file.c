@@ -483,6 +483,33 @@ get_file_by_id(const file_id_t *id, file_state_t **out_file)
     return false;
 }
 
+bool
+get_file_by_index(int index, file_state_t **out_file)
+{
+    bool ok = true;
+    pthread_mutex_lock(&lock);
+    if(index >= 0 && index < num_files)
+    {
+        *out_file = &files[index];
+    }
+    else
+    {
+       ok = false;
+    }    
+    pthread_mutex_unlock(&lock);
+    return ok;
+}
+
+
+int
+get_num_files()
+{
+    pthread_mutex_lock(&lock);
+    int ret = num_files;
+    pthread_mutex_unlock(&lock);
+    return ret;
+}
+
 uint32_t
 get_block_status_list(file_state_t *file, block_status_t block_status[MAX_NUM_BLOCKS])
 {

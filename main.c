@@ -5,6 +5,7 @@
 #include "type.h"
 #include "file.h"
 #include "config.h"
+#include "peer.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -35,7 +36,20 @@ main(int argc, char **argv)
     load_config(NULL);
     initialize();
     server_run(8888);
-
+    int files = get_num_files();
+    for(int i = 0; i < files; i++)
+    {
+        file_state_t * filetemp;
+        if(get_file_by_index(i, &filetemp))
+        {
+            peer_info_t peer_list[MAX_NUM_PEERS];
+            uint32_t numpeers = get_peer_list(filetemp, peer_list);
+            for(uint32_t j = 0; j < numpeers; j++)
+            {
+                client_resume(peer_list[j] , 8889, filetemp);
+            }
+        }
+    }
     char *line = NULL;
     size_t len = 0;
     ssize_t read;
