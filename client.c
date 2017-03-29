@@ -217,10 +217,16 @@ client_get_block_data(client_state_t *state, uint32_t block_index)
         return false;
     }
 
+    /* Validate block size */
+    if (block_size != file->meta.block_size) {
+        debugf("Block size mismatch");
+        return false;
+    }
+
     /* Read block contents */
     uint8_t *block_data = malloc(block_size);
     if (!cmd_read(fd, block_data, block_size)) {
-        debugf("Failed to read block contents from disk");
+        debugf("Failed to read block contents from socket");
         free(block_data);
         return false;
     }
@@ -233,9 +239,8 @@ client_get_block_data(client_state_t *state, uint32_t block_index)
     }
 
     /* Write block to disk */
-    off_t offset = block_index * block_size;
-    if (!write_block(file->file_fd, block_data, block_size, offset)) {
-        debugf("Failed to write block contents to socket");
+    if (!write_file_block(file, block_index, block_data)) {
+        debugf("Failed to write block contents to disk");
         free(block_data);
         return false;
     }
@@ -419,7 +424,7 @@ cleanup:
 }
 
 bool
-client_run(const char *ip_addr, uint16_t port, uint16_t server_port, const char *file_name)
+client_start(const char *ip_addr, uint16_t port, uint16_t server_port, const char *file_name)
 {
     client_state_t *state = malloc(sizeof(client_state_t));
     if (!ipv4_atoi(ip_addr, &state->server.ip_addr)) {
@@ -447,12 +452,10 @@ client_run(const char *ip_addr, uint16_t port, uint16_t server_port, const char 
 
 
 bool
-client_resume(peer_info_t peerinfo, uint16_t server_port, file_state_t * file)
+client_resume(peer_info_t peer, uint16_t server_port, file_state_t *file)
 {
     client_state_t *state = malloc(sizeof(client_state_t));
-    state->server = peerinfo;
-    printf("IP NUMBER THING TEMP: %x\n", peerinfo.ip_addr);
-    printf("PORT NUMBER THING TEMP: %d\n", peerinfo.port);
+    state->server = peer;
     state->u.file = file;
     state->sockfd = -1;
     state->port = server_port;

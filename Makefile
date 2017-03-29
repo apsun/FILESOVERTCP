@@ -9,7 +9,9 @@ all: $(OBJS)
 .PHONY: test
 test:
 	mkdir -p test
-	dd if=/dev/urandom of=test/a.bin bs=1M count=100
+	dd if=/dev/urandom of=test/a.bin bs=10 count=1
+	dd if=/dev/urandom of=test/b.bin bs=1024 count=1
+	dd if=/dev/urandom of=test/c.bin bs=1M count=100
 
 .PHONY: clean
 clean:

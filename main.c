@@ -51,6 +51,7 @@ main(int argc, char **argv)
             }
         }
     }
+
     char *line = NULL;
     size_t len = 0;
     ssize_t read;
@@ -64,7 +65,7 @@ main(int argc, char **argv)
         if (starts_with(cmd, "download ")) {
             char *fname = cmd + strlen("download ");
             fname = trim_string(fname);
-            client_run("127.0.0.1", 8888, 8889, fname);
+            client_start("127.0.0.1", 8888, 8889, fname);
             flush();
         } else if (starts_with(cmd, "upload ")) {
             char *path = cmd + strlen("upload ");

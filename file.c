@@ -357,14 +357,26 @@ remove_downloading_blocks(file_state_t *file)
 {
     pthread_mutex_lock(&(file->lock));
     uint32_t num_blocks = file->meta.block_count;
-    for (uint32_t i = 0; i < num_blocks; ++i)
-    {
-        if(file->block_status[i] == BS_DOWNLOADING)
-        {   
+    for (uint32_t i = 0; i < num_blocks; ++i) {
+        if (file->block_status[i] == BS_DOWNLOADING) {   
             file->block_status[i] = BS_DONT_HAVE;
         }
     }
     pthread_mutex_unlock(&(file->lock));
+}
+
+bool
+write_file_block(file_state_t *file, uint32_t block_index, uint8_t *block_data)
+{
+    size_t count = file->meta.block_size;
+
+    /* Truncate last block */
+    if (block_index == file->meta.block_count - 1) {
+        count = file->meta.file_size - block_index * file->meta.block_size;
+    }
+
+    off_t offset = block_index * file->meta.block_size;
+    return write_block(file->file_fd, block_data, count, offset);
 }
 
 bool

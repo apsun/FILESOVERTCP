@@ -31,6 +31,12 @@ void
 remove_downloading_blocks(file_state_t *file);
 
 /**
+ * Writes a received file block to disk.
+ */
+bool
+write_file_block(file_state_t *file, uint32_t block_index, uint8_t *block_data);
+
+/**
  * Initializes the file storage.
  */
 bool
