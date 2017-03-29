@@ -503,20 +503,15 @@ get_file_by_id(const file_id_t *id, file_state_t **out_file)
 bool
 get_file_by_index(int index, file_state_t **out_file)
 {
-    bool ok = true;
+    bool ok = false;
     pthread_mutex_lock(&lock);
-    if(index >= 0 && index < num_files)
-    {
+    if (index >= 0 && index < num_files) {
         *out_file = &files[index];
+        ok = true;
     }
-    else
-    {
-       ok = false;
-    }    
     pthread_mutex_unlock(&lock);
     return ok;
 }
-
 
 int
 get_num_files()
@@ -579,8 +574,8 @@ have_all_blocks(file_state_t *file)
 bool
 find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t *block_index)
 {
-    uint32_t blocksfound = 0;
-    uint32_t block_needed[MAX_NUM_BLOCKS] = {0};
+    uint32_t blocks_found = 0;
+    uint32_t block_needed[MAX_NUM_BLOCKS];
     pthread_mutex_lock(&file->lock);
     uint32_t num_blocks = file->meta.block_count;
     for (uint32_t i = 0; i < num_blocks; ++i) {
@@ -593,20 +588,18 @@ find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t *block_ind
         uint32_t index = i / 8;
         uint32_t shift = i % 8;
         if ((block_bitmap[index] & (1 << shift)) != 0) {
-            block_needed[blocksfound] = i;
-            blocksfound++;
+            block_needed[blocks_found++] = i;
         }
     }
-    if(blocksfound == 0)
-    {
+
+    /* Randomize block order */
+    if (blocks_found == 0) {
         pthread_mutex_unlock(&file->lock);
         return false;
-    }
-    else
-    {
-        uint32_t tempindex = block_needed[rand() % blocksfound];
-        *block_index = tempindex;
-        file->block_status[tempindex] = BS_DOWNLOADING;
+    } else {
+        uint32_t index = block_needed[rand() % blocks_found];
+        *block_index = index;
+        file->block_status[index] = BS_DOWNLOADING;
         pthread_mutex_unlock(&file->lock);
         return true;
     }
@@ -618,36 +611,4 @@ check_block(file_state_t *file, uint32_t block_index, uint8_t *block_data)
     sha256_t hash = compute_sha256(file->meta.block_size, block_data);
     sha256_t expected = file->meta.block_hashes[block_index];
     return sha256_equals(&hash, &expected);
-}
-
-uint32_t *
-generate_random_block_order(file_state_t *file)
-{
-    pthread_mutex_lock(&file->lock);
-    uint32_t num_blocks = file->meta.block_count;
-    pthread_mutex_unlock(&file->lock);
-    uint32_t * ret = malloc(sizeof(uint32_t) * num_blocks);
-    if(ret == NULL)
-    {
-        return ret;
-    }
-    for(uint32_t i = 0; i < num_blocks; ++i)
-    {
-        ret[i] = i;
-    }
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    int usec = tv.tv_usec;
-    srand48(usec);
-    size_t n = num_blocks;
-    if (n > 1) {
-        size_t i;
-        for (i = n - 1; i > 0; i--) {
-            size_t j = (unsigned int) (drand48()*(i+1));
-            uint32_t t = ret[j];
-            ret[j] = ret[i];
-            ret[i] = t;
-        }
-    }
-    return ret;    
 }

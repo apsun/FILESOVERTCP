@@ -71,7 +71,7 @@ bool
 get_file_by_index(int index, file_state_t **out_file);
 
 /**
- * Returns the num of files
+ * Returns the number of open files.
  */
 int
 get_num_files();
@@ -113,12 +113,5 @@ find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t *block_ind
  */
 bool
 check_block(file_state_t *file, uint32_t block_index, uint8_t *block_data);
-
-/**
- * Generates an array containtng all of the blockindexes of a file in a random order
- * Returns a malloced array (NULL if malloc fails).
- */
-uint32_t *
-generate_random_block_order(file_state_t *file);
 
 #endif
