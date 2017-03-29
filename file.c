@@ -562,6 +562,8 @@ have_all_blocks(file_state_t *file)
 bool
 find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t *block_index)
 {
+    uint32_t blocksfound = 0;
+    uint32_t block_needed[MAX_NUM_BLOCKS] = {0};
     pthread_mutex_lock(&file->lock);
     uint32_t num_blocks = file->meta.block_count;
     for (uint32_t i = 0; i < num_blocks; ++i) {
@@ -574,14 +576,23 @@ find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t *block_ind
         uint32_t index = i / 8;
         uint32_t shift = i % 8;
         if ((block_bitmap[index] & (1 << shift)) != 0) {
-            file->block_status[i] = BS_DOWNLOADING;
-            *block_index = i;
-            pthread_mutex_unlock(&file->lock);
-            return true;
+            block_needed[blocksfound] = i;
+            blocksfound++;
         }
     }
-    pthread_mutex_unlock(&file->lock);
-    return false;
+    if(blocksfound == 0)
+    {
+        pthread_mutex_unlock(&file->lock);
+        return false;
+    }
+    else
+    {
+        uint32_t tempindex = block_needed[rand() % blocksfound];
+        *block_index = tempindex;
+        file->block_status[tempindex] = BS_DOWNLOADING;
+        pthread_mutex_unlock(&file->lock);
+        return true;
+    }
 }
 
 bool
