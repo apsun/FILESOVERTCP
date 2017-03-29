@@ -352,6 +352,21 @@ set_block_status(file_state_t *file, uint32_t index, block_status_t bs)
     pthread_mutex_unlock(&(file->lock));
 }
 
+void
+remove_downloading_blocks(file_state_t *file)
+{
+    pthread_mutex_lock(&(file->lock));
+    uint32_t num_blocks = file->meta.block_count;
+    for (uint32_t i = 0; i < num_blocks; ++i)
+    {
+        if(file->block_status[i] == BS_DOWNLOADING)
+        {   
+            file->block_status[i] = BS_DONT_HAVE;
+        }
+    }
+    pthread_mutex_unlock(&(file->lock));
+}
+
 bool
 initialize(void)
 {

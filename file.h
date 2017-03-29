@@ -23,6 +23,13 @@ add_local_file(const char *file_path, file_state_t **file);
 void
 set_block_status(file_state_t *file, uint32_t index, block_status_t bs);
 
+
+/**
+ * Removes downloading blocks from the block list.
+ */
+void
+remove_downloading_blocks(file_state_t *file);
+
 /**
  * Initializes the file storage.
  */

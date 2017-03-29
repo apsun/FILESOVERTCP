@@ -42,6 +42,7 @@ main(int argc, char **argv)
         file_state_t * filetemp;
         if(get_file_by_index(i, &filetemp))
         {
+            remove_downloading_blocks(filetemp);
             peer_info_t peer_list[MAX_NUM_PEERS];
             uint32_t numpeers = get_peer_list(filetemp, peer_list);
             for(uint32_t j = 0; j < numpeers; j++)
