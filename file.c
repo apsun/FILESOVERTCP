@@ -442,9 +442,11 @@ flush(void)
     pthread_mutex_lock(&lock);
     for (int i = 0; i < num_files; ++i) {
         pthread_mutex_lock(&files[i].lock);
-        write_magic(write_all, files[i].state_file_fd);
-        write_file_state(write_all, files[i].state_file_fd, &files[i]);
-        fsync(files[i].state_file_fd);
+        int state_fd = files[i].state_file_fd;
+        lseek(state_fd, 0, SEEK_SET);
+        write_magic(write_all, state_fd);
+        write_file_state(write_all, state_fd, &files[i]);
+        fsync(state_fd);
         fsync(files[i].file_fd);
         pthread_mutex_unlock(&files[i].lock);
     }
