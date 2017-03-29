@@ -3,6 +3,8 @@
 #include "type.h"
 #include "cmd.h"
 #include "file.h"
+#include "peer.h"
+#include "io.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -13,6 +15,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/socket.h>
+#include <netinet/tcp.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
@@ -53,7 +56,7 @@ client_get_peer_list(client_state_t *state)
 
     /* Write file ID */
     file_id_t id = file->meta.id;
-    if (!cmd_write(fd, &id, sizeof(id))) {
+    if (!write_file_id(cmd_write, fd, &id)) {
         debugf("Failed to write file ID");
         return false;
     }
@@ -73,7 +76,7 @@ client_get_peer_list(client_state_t *state)
 
     /* Check response op and error code */
     if (op != CMD_OP_GET_PEER_LIST || err != CMD_ERR_OK) {
-        debugf("Response = error");
+        debugf("Response error: op(%08x), err(%08x)", op, err);
         return false;
     }
 
@@ -87,22 +90,14 @@ client_get_peer_list(client_state_t *state)
     /* Read each peer */
     for (uint32_t i = 0; i < num_peers; ++i) {
         peer_info_t peer;
-
-        /* Read peer IP */
-        if (!cmd_read(fd, &peer.ip_addr, sizeof(peer.ip_addr))) {
-            debugf("Failed to read peer IP address");
-            return false;
-        }
-
-        /* Read peer port */
-        if (!cmd_read(fd, &peer.port, sizeof(peer.port))) {
-            debugf("Failed to read peer port");
+        if (!read_peer(cmd_read, fd, &peer)) {
+            debugf("Failed to read peer");
             return false;
         }
 
         /* If we haven't seen this peer before, connect to it */
         /* TODO: This should go into a queue in the future */
-        if (add_new_peer(file, peer)) {
+        if (peer_add(file, peer)) {
             client_state_t *new_arg = malloc(sizeof(client_state_t));
             new_arg->server = peer;
             new_arg->u.file = file;
@@ -142,7 +137,7 @@ client_get_block_list(client_state_t *state, uint8_t block_bitmap[(MAX_NUM_BLOCK
 
     /* Write file ID */
     file_id_t id = file->meta.id;
-    if (!cmd_write(fd, &id, sizeof(id))) {
+    if (!write_file_id(cmd_write, fd, &id)) {
         debugf("Failed to write file ID");
         return false;
     }
@@ -156,7 +151,7 @@ client_get_block_list(client_state_t *state, uint8_t block_bitmap[(MAX_NUM_BLOCK
 
     /* Check op and error code */
     if (op != CMD_OP_GET_BLOCK_LIST || err != CMD_ERR_OK) {
-        debugf("Response = error");
+        debugf("Response error: op(%08x), err(%08x)", op, err);
         return false;
     }
 
@@ -191,7 +186,7 @@ client_get_block_data(client_state_t *state, uint32_t block_index)
 
     /* Write file ID */
     file_id_t id = file->meta.id;
-    if (!cmd_write(fd, &id, sizeof(id))) {
+    if (!write_file_id(cmd_write, fd, &id)) {
         debugf("Failed to write file ID");
         return false;
     }
@@ -211,7 +206,7 @@ client_get_block_data(client_state_t *state, uint32_t block_index)
 
     /* Check response op/err */
     if (op != CMD_OP_GET_BLOCK_DATA || err != CMD_ERR_OK) {
-        debugf("Response = error");
+        debugf("Response error: op(%08x), err(%08x)", op, err);
         return false;
     }
 
@@ -222,18 +217,30 @@ client_get_block_data(client_state_t *state, uint32_t block_index)
         return false;
     }
 
+    /* Validate block size */
+    if (block_size != file->meta.block_size) {
+        debugf("Block size mismatch");
+        return false;
+    }
+
     /* Read block contents */
     uint8_t *block_data = malloc(block_size);
     if (!cmd_read(fd, block_data, block_size)) {
-        debugf("Failed to read block contents from disk");
+        debugf("Failed to read block contents from socket");
+        free(block_data);
+        return false;
+    }
+
+    /* Check block data against correct hash */
+    if (!check_block(file, block_index, block_data)) {
+        debugf("Block hash mismatch");
         free(block_data);
         return false;
     }
 
     /* Write block to disk */
-    off_t offset = block_index * block_size;
-    if (!write_block(file->file_fd, block_data, block_size, offset)) {
-        debugf("Failed to write block contents to socket");
+    if (!write_file_block(file, block_index, block_data)) {
+        debugf("Failed to write block contents to disk");
         free(block_data);
         return false;
     }
@@ -242,12 +249,9 @@ client_get_block_data(client_state_t *state, uint32_t block_index)
     free(block_data);
 
     /* Mark block as completed */
-    if (!mark_block(file, block_index, BS_HAVE)) {
-        debugf("Failed to mark block as completed");
-        return false;
-    }
+    set_block_status(file, block_index, BS_HAVE);
 
-    debugf("GET_BLOCK_DATA successful");
+    debugf("GET_BLOCK_DATA successful (%u/%u)", block_index + 1, file->meta.block_count);
     return true;
 }
 
@@ -256,21 +260,29 @@ client_loop(client_state_t *state)
 {
     file_state_t *file = state->u.file;
     uint8_t block_list[(MAX_NUM_BLOCKS + 7) / 8];
-    while (client_get_peer_list(state)) {
+    bool got_block = false;
+    while (!have_all_blocks(file) && client_get_peer_list(state)) {
+        /* Get server's block list */
         if (!client_get_block_list(state, block_list)) {
             break;
         }
 
-        /* TODO: Break when we have all blocks */
-        /* TODO: Sleep after loop iteration */
+        /* Find out what we need */
         uint32_t block_index;
         while (find_needed_block(file, block_list, &block_index)) {
             if (!client_get_block_data(state, block_index)) {
-                remove_peer(file, state->server);
-                mark_block(file, block_index, BS_DONT_HAVE);
+                peer_remove(file, state->server);
+                set_block_status(file, block_index, BS_DONT_HAVE);
                 return;
             }
+            got_block = true;
         }
+
+        /* If server didn't have any new blocks, sleep a bit */
+        if (!got_block) {
+            sleep(15);
+        }
+        got_block = false;
     }
 }
 
@@ -297,27 +309,24 @@ client_connect(client_state_t *state)
         return false;
     }
 
-    /* Connection successful! */
-    debugf("Connected to %s:%d\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+    /* Optimization */
+    int i = 1;
+    setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (void *)&i, sizeof(i));
 
-    /* Write and the magic bytes */
-    uint32_t magic = FTCP_MAGIC;
-    if (!cmd_write(sockfd, &magic, sizeof(magic))) {
+    /* Connection successful! */
+    debugf("Connected to %s:%d", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+
+    /* Write the magic bytes */
+    if (!write_magic(cmd_write, sockfd)) {
         debugf("Failed to write FTCP_MAGIC");
         close(sockfd);
         return false;
     }
 
-    /* Read magic from server */
-    if (!cmd_read(sockfd, &magic, sizeof(magic))) {
+    /* Read response magic bytes */
+    if (!read_magic(cmd_read, sockfd)) {
         debugf("Failed to read FTCP_MAGIC");
         close(sockfd);
-        return false;
-    }
-
-    /* Check magic match */
-    if (magic != FTCP_MAGIC) {
-        debugf("Magic mismatch, expected FTCP_MAGIC, got 0x%08x", magic);
         return false;
     }
 
@@ -344,14 +353,8 @@ client_worker_new_file(void *arg)
     const char *str = state->u.file_name;
     uint32_t len = strlen(str) + 1;
 
-    /* Write string length */
-    if (!cmd_write(fd, &len, sizeof(len))) {
-        debugf("Failed to write string length");
-        goto cleanup;
-    }
-
-    /* Write string contents */
-    if (!cmd_write(fd, str, len)) {
+    /* Write string */
+    if (!write_string(cmd_write, fd, str, len)) {
         debugf("Failed to write string");
         goto cleanup;
     }
@@ -371,13 +374,20 @@ client_worker_new_file(void *arg)
 
     /* Read the metadata */
     file_meta_t meta;
-    if (!cmd_read(fd, &meta, sizeof(meta))) {
+    if (!read_file_meta(cmd_read, fd, &meta)) {
         debugf("Failed to read file metadata");
         goto cleanup;
     }
 
     /* Write metadata to disk and add file to tracker */
-    file_state_t *file = create_local_file(&meta);
+    file_state_t *file;
+    if (!add_remote_file(&meta, &file)) {
+        debugf("Could not add new file");
+        goto cleanup;
+    }
+
+    /* Add the server we just connected to inot the peer list */
+    peer_add(file, state->server);
 
     /* Enter client loop */
     state->u.file = file;
@@ -413,11 +423,14 @@ cleanup:
     return NULL;
 }
 
-void
-client_run(uint32_t ip_addr, uint16_t port, uint16_t server_port, const char *file_name)
+bool
+client_start(const char *ip_addr, uint16_t port, uint16_t server_port, const char *file_name)
 {
     client_state_t *state = malloc(sizeof(client_state_t));
-    state->server.ip_addr = ip_addr;
+    if (!ipv4_atoi(ip_addr, &state->server.ip_addr)) {
+        debugf("Invalid IP address: %s", ip_addr);
+        return false;
+    }
     state->server.port = port;
     state->u.file_name = file_name;
     state->sockfd = -1;
@@ -426,13 +439,37 @@ client_run(uint32_t ip_addr, uint16_t port, uint16_t server_port, const char *fi
     pthread_t thread;
     if (pthread_create(&thread, NULL, client_worker_new_file, state) < 0) {
         debuge("Failed to create client thread");
-        return;
+        return false;
     }
 
     if (pthread_detach(thread) < 0) {
         debuge("Failed to detach client thread");
-        return;
     }
 
     debugf("Started client thread");
+    return true;
+}
+
+
+bool
+client_resume(peer_info_t peer, uint16_t server_port, file_state_t *file)
+{
+    client_state_t *state = malloc(sizeof(client_state_t));
+    state->server = peer;
+    state->u.file = file;
+    state->sockfd = -1;
+    state->port = server_port;
+
+    pthread_t thread;
+    if (pthread_create(&thread, NULL, client_worker, state) < 0) {
+        debuge("Failed to create client thread");
+        return false;
+    }
+
+    if (pthread_detach(thread) < 0) {
+        debuge("Failed to detach client thread");
+    }
+
+    debugf("Started client thread");
+    return true;
 }

@@ -1,45 +1,58 @@
+#ifndef FILE_H
+#define FILE_H
+
 #include <stdbool.h>
 #include <stdint.h>
 #include "type.h"
 
-bool
-remove_peer(file_state_t *file, peer_info_t peer);
-
 /**
- * Marks the block as what it wants
+ * Adds a remote file for downloading.
  */
 bool
-mark_block(file_state_t * file, uint32_t index, block_status_t bs);
+add_remote_file(const file_meta_t *meta, file_state_t **file);
+
 /**
- * Checks if a peer is new
- * If it is adds it to the peerlist and returns true.
+ * Adds a local file for uploading.
  */
 bool
-add_new_peer(file_state_t * file, peer_info_t peer);
+add_local_file(const char *file_path, file_state_t **file);
 
 /**
- * Adds all the files in file_path and sets all the blocks as downloaded
- * Returns false if it can not open the directory.
+ * Sets the status of a block.
+ */
+void
+set_block_status(file_state_t *file, uint32_t index, block_status_t bs);
+
+
+/**
+ * Removes downloading blocks from the block list.
+ */
+void
+remove_downloading_blocks(file_state_t *file);
+
+/**
+ * Writes a received file block to disk.
  */
 bool
-add_directory(const char *file_path);
+write_file_block(file_state_t *file, uint32_t block_index, uint8_t *block_data);
 
 /**
- * Adds a file given the meta.
- * Returns a pointer to a filestate object.
+ * Initializes the file storage.
  */
-file_state_t *
-add_file(file_meta_t *meta);
-
-file_state_t *
-create_local_file(file_meta_t * meta);
+bool
+initialize(void);
 
 /**
- * Calculates the optimal size of a block (in bytes) used
- * to transfer a file of the specified size.
+ * Flushes all dynamic state to disk.
  */
-uint64_t
-block_calculate_size(uint64_t file_size);
+bool
+flush(void);
+
+/**
+ * Closes all files. Call this at application shutdown.
+ */
+bool
+finalize(void);
 
 /**
  * Gets a file by name. Returns true and writes out_file
@@ -49,25 +62,25 @@ bool
 get_file_by_name(const char *file_name, file_state_t **out_file);
 
 /**
- * Returns true iff the ID represented by a equals the ID
- * represented by b.
- */
-bool
-file_id_equals(const file_id_t *a, const file_id_t *b);
-
-/**
  * Gets a file by its ID. Returns true and writes out_file
  * if the file exists, and returns false otherwise.
  */
 bool
 get_file_by_id(const file_id_t *id, file_state_t **out_file);
 
+
 /**
- * Gets the peer list for a particular file. Returns the
- * number of peers in the list.
+ * Gets a file by its index. Returns true and writes out_file
+ * if the file exists, and returns false otherwise.
  */
-uint32_t
-get_peer_list(file_state_t *file, peer_info_t peer_list[MAX_NUM_PEERS]);
+bool
+get_file_by_index(int index, file_state_t **out_file);
+
+/**
+ * Returns the number of open files.
+ */
+int
+get_num_files();
 
 /**
  * Gets the block status list for a particular file. Returns
@@ -85,13 +98,26 @@ bool
 get_block_data(file_state_t *file, uint32_t block_index, uint8_t *block_data);
 
 /**
- * Gets the index of a block that t
+ * Returns whether we have successfully downloaded all blocks
+ * in the file.
+ */
+bool
+have_all_blocks(file_state_t *file);
+
+/**
+ * Gets the index of a block that is not already downloaded
+ * and has the corresponding bit set to 1 in the block bitmap.
+ * Returns false if there is no such block. The returned block,
+ * if any, has its status atomically set to BS_DOWNLOADING.
  */
 bool
 find_needed_block(file_state_t *file, uint8_t *block_bitmap, uint32_t *block_index);
 
 /**
- * Generates a random file ID.
+ * Validates a downloaded block. Returns true iff the block data
+ * matches its expected hash.
  */
-file_id_t
-generate_file_id(void);
+bool
+check_block(file_state_t *file, uint32_t block_index, uint8_t *block_data);
+
+#endif

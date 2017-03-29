@@ -1,5 +1,6 @@
 #include "cmd.h"
 #include "util.h"
+#include "io.h"
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -98,13 +99,13 @@ cmd_read_request_header(int fd, uint32_t *op)
 
     /* Check request magic */
     if (magic != CMD_REQUEST) {
-        printe("Expected CMD_REQUEST, got 0x%08x\n", magic);
+        debugf("Expected CMD_REQUEST, got 0x%08x", magic);
         return false;
     }
 
     /* Check opcode */
     if (!is_valid_op(op_tmp)) {
-        printe("Expected CMD_OP_*, got 0x%08x\n", op_tmp);
+        debugf("Expected CMD_OP_*, got 0x%08x", op_tmp);
         return false;
     }
 
@@ -136,19 +137,19 @@ cmd_read_response_header(int fd, uint32_t *op, uint32_t *err)
 
     /* Check response magic */
     if (magic != CMD_RESPONSE) {
-        printe("Expected CMD_RESPONSE, got 0x%08x\n", magic);
+        debugf("Expected CMD_RESPONSE, got 0x%08x", magic);
         return false;
     }
 
     /* Check opcode */
     if (!is_valid_op(op_tmp)) {
-        printe("Expected CMD_OP_*, got 0x%08x\n", op_tmp);
+        debugf("Expected CMD_OP_*, got 0x%08x", op_tmp);
         return false;
     }
 
     /* Check error code */
     if (!is_valid_err(err_tmp)) {
-        printe("Expected CMD_ERR_*, got 0x%08x\n", err_tmp);
+        debugf("Expected CMD_ERR_*, got 0x%08x", err_tmp);
         return false;
     }
 

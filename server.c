@@ -3,6 +3,8 @@
 #include "type.h"
 #include "cmd.h"
 #include "file.h"
+#include "peer.h"
+#include "io.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -12,11 +14,15 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <pthread.h>
 
 typedef struct {
+    /* Holds the socket descriptor */
     int asockfd;
+
+    /* Connected client's IP address */
     uint32_t client_ip;
 } server_state_t;
 
@@ -26,40 +32,12 @@ server_handle_get_file_meta(server_state_t *state)
     const uint32_t op = CMD_OP_GET_FILE_META;
     int fd = state->asockfd;
 
-    /* Read file name length */
-    uint32_t file_name_len;
-    if (!cmd_read(fd, &file_name_len, sizeof(file_name_len))) {
-        debugf("Failed to read file name length");
-        cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
-        return false;
-    }
-
-    /* Validate file name length */
-    if (file_name_len == 0 || file_name_len > MAX_FILE_NAME_LEN) {
-        debugf("File name length invalid");
-        cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
-        return false;
-    }
-
     /* Read file name */
     char file_name[MAX_FILE_NAME_LEN];
-    if (!cmd_read(fd, file_name, file_name_len)) {
+    uint32_t file_name_len = MAX_FILE_NAME_LEN;
+    if (!read_string(cmd_read, fd, file_name, &file_name_len)) {
         debugf("Failed to read file name");
         cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
-        return false;
-    }
-
-    /* Ensure we have a NUL terminator */
-    if (file_name[file_name_len - 1] != '\0') {
-        debugf("File name does not end with NUL");
-        cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
-        return false;
-    }
-
-    /* Check for embedded NUL characters */
-    if (strlen(file_name) != file_name_len - 1) {
-        debugf("File name has embedded NUL chars");
-        cmd_write_response_header(fd, op, CMD_ERR_FILE_NOT_FOUND);
         return false;
     }
 
@@ -77,8 +55,8 @@ server_handle_get_file_meta(server_state_t *state)
         return false;
     }
 
-    /* Write response */
-    if (!cmd_write(fd, &file->meta, sizeof(file->meta))) {
+    /* Write file meta */
+    if (!write_file_meta(cmd_write, fd, &file->meta)) {
         debugf("Failed to write file meta");
         return false;
     }
@@ -95,7 +73,7 @@ server_handle_get_peer_list(server_state_t *state)
 
     /* Read file ID */
     file_id_t file_id;
-    if (!cmd_read(fd, &file_id, sizeof(file_id))) {
+    if (!read_file_id(cmd_read, fd, &file_id)) {
         debugf("Failed to read file ID");
         cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
         return false;
@@ -121,7 +99,7 @@ server_handle_get_peer_list(server_state_t *state)
     peer_info_t peer;
     peer.ip_addr = state->client_ip;
     peer.port = port;
-    add_new_peer(file, peer);
+    peer_add(file, peer);
 
     /* Get peer list */
     peer_info_t peer_list[MAX_NUM_PEERS];
@@ -139,16 +117,10 @@ server_handle_get_peer_list(server_state_t *state)
         return false;
     }
 
-    /* Write each peer's IP address */
+    /* Write each peer's IP address/port */
     for (uint32_t i = 0; i < num_peers; ++i) {
-        uint32_t peer_ip = peer_list[i].ip_addr;
-        uint16_t peer_port = peer_list[i].port;
-        if (!cmd_write(fd, &peer_ip, sizeof(peer_ip))) {
-            debugf("Failed to write peer IP #%u", i);
-            return false;
-        }
-        if (!cmd_write(fd, &peer_port, sizeof(peer_port))) {
-            debugf("Failed to write peer port #%u", i);
+        if (!write_peer(cmd_write, fd, &peer_list[i])) {
+            debugf("Failed to write peer #%u", i);
             return false;
         }
     }
@@ -165,7 +137,7 @@ server_handle_get_block_list(server_state_t *state)
 
     /* Read file ID */
     file_id_t file_id;
-    if (!cmd_read(fd, &file_id, sizeof(file_id))) {
+    if (!read_file_id(cmd_read, fd, &file_id)) {
         debugf("Failed to read file ID");
         cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
         return false;
@@ -226,7 +198,7 @@ server_handle_get_block_data(server_state_t *state)
 
     /* Read file ID */
     file_id_t file_id;
-    if (!cmd_read(fd, &file_id, sizeof(file_id))) {
+    if (!read_file_id(cmd_read, fd, &file_id)) {
         debugf("Failed to read file ID");
         cmd_write_response_header(fd, op, CMD_ERR_MALFORMED);
         goto cleanup;
@@ -281,7 +253,7 @@ server_handle_get_block_data(server_state_t *state)
         goto cleanup;
     }
 
-    debugf("GET_BLOCK_DATA successful");
+    debugf("GET_BLOCK_DATA successful (%u/%u)", block_index + 1, file->meta.block_count);
     ok = true;
 
 cleanup:
@@ -312,19 +284,12 @@ server_worker(void *arg)
     server_state_t *state = arg;
 
     /* Read and check the magic bytes */
-    uint32_t magic;
-    if (!cmd_read(state->asockfd, &magic, sizeof(magic))) {
+    if (!read_magic(cmd_read, state->asockfd)) {
         debugf("Failed to read FTCP_MAGIC");
         goto cleanup;
     }
 
-    if (magic != FTCP_MAGIC) {
-        debugf("Magic mismatch, expected FTCP_MAGIC, got 0x%08x", magic);
-        goto cleanup;
-    }
-
-    /* Respond with our own magic bytes */
-    if (!cmd_write(state->asockfd, &magic, sizeof(magic))) {
+    if (!write_magic(cmd_write, state->asockfd)) {
         debugf("Failed to write FTCP_MAGIC");
         goto cleanup;
     }
@@ -346,7 +311,7 @@ server_worker(void *arg)
     }
 
 cleanup:
-    debugf("Cleaning up server worker\n");
+    debugf("Cleaning up server worker");
     close(state->asockfd);
     free(state);
     return NULL;
@@ -392,8 +357,12 @@ server_thread(void *arg)
             continue;
         }
 
+        /* Optimization */
+        int i = 1;
+        setsockopt(asockfd, IPPROTO_TCP, TCP_NODELAY, (void *)&i, sizeof(i));
+
         /* Connection successful! */
-        debugf("Got connection from %s:%d\n", inet_ntoa(caddr.sin_addr), ntohs(caddr.sin_port));
+        debugf("Got connection from %s:%d", inet_ntoa(caddr.sin_addr), ntohs(caddr.sin_port));
 
         /* Initialize worker thread args */
         server_state_t *arg = malloc(sizeof(server_state_t));
@@ -416,14 +385,14 @@ server_thread(void *arg)
     }
 
 cleanup:
-    debugf("Cleaning up server thread\n");
+    debugf("Cleaning up server thread");
     if (sockfd >= 0) {
         close(sockfd);
     }
     return NULL;
 }
 
-void
+bool
 server_run(uint16_t port)
 {
     pthread_t thread;
@@ -431,13 +400,13 @@ server_run(uint16_t port)
 
     if (pthread_create(&thread, NULL, server_thread, arg) < 0) {
         debuge("Failed to create server thread");
-        return;
+        return false;
     }
 
     if (pthread_detach(thread) < 0) {
         debuge("Failed to detach server thread");
-        return;
     }
 
     debugf("Started server thread");
+    return true;
 }

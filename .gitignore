@@ -1,6 +1,7 @@
 # Binary objects
 *.o
 ftcp
+test/
 
 # Garbage
 .DS_Store
