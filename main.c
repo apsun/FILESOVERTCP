@@ -26,6 +26,17 @@ usage(const char *name)
     return 1;
 }
 
+static int
+print_command_instruction(){
+    printe("Please enter one of the following commands:\n");
+    printe("\n[1] download <filename> - to download a file"
+        "\n[2] upload <path/to/filename> - to upload a file"
+        "\n[3] status <filename> - to see the status of an uploaded file"
+        "\n[4] help - to learn more about the program"
+        "\n[5] exit - to exit the program \n\n");
+    return 1;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -55,11 +66,23 @@ main(int argc, char **argv)
     char *line = NULL;
     size_t len = 0;
     ssize_t read;
+
+    system("clear");
+    printe("/**********************\\\n");
+    printe("    Welcome to FTCP\n");
+    printe("\\**********************/\n\n");
+    print_command_instruction();
+
     while (true) {
+
+        //Reads the user's option
+
         printe("FTCP> ");
         if ((read = getline(&line, &len, stdin)) < 0) {
             break;
         }
+
+        printe("\n");
 
         char *cmd = trim_string(line);
         if (starts_with(cmd, "download ")) {
@@ -87,12 +110,13 @@ main(int argc, char **argv)
             }
         } else if (strcmp(cmd, "exit") == 0) {
             break;
-        } else {
-            printe("Unknown command! Valid commands are:\n");
-            printe("> download file.txt\n");
-            printe("> upload path/to/file.txt\n");
-            printe("> status file.txt\n");
-            printe("> exit\n");
+        } else if (strcmp(cmd, "help") == 0) {
+            printe("FTCP 1.0\n"
+                  "This program is created to speed up the process of transferring files. As there are more people downloading the same file, the speed will significantly increase, similarly to Torrent. Unlike Torrent, however, we do not require trackers but just regular users. This allows for greater flexibility and ease of use");
+            print_command_instruction();
+        }else {
+            printe("INVALID COMMAND!\n");
+            print_command_instruction();
         }
     }
 
