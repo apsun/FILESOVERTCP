@@ -17,12 +17,13 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdarg.h>
+#include <getopt.h>
 
 static int
 usage(const char *name)
 {
     printe("usage: %s <options>\n", name);
-    printe(" -c <path> -- config file path");
+    printe(" -c <path> -- config file path\n");
     return 1;
 }
 
@@ -40,11 +41,15 @@ print_command_instruction(){
 int
 main(int argc, char **argv)
 {
+    char *config_file = NULL;
     if (argc != 1) {
-        return usage(argv[0]);
+        int opt = getopt(argc, argv, "c:");
+        if(opt == 'c' && argc == 3){
+          config_file = strdup(optarg);
+        }else return usage(argv[0]);
     }
 
-    load_config(NULL);
+    load_config(config_file);
     initialize();
     server_run(8888);
     int files = get_num_files();
@@ -124,5 +129,6 @@ main(int argc, char **argv)
     finalize();
     printe("Bye!\n");
     free(line);
+    if(config_file) free(config_file);
     return 0;
 }
