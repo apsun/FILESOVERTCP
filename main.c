@@ -30,11 +30,11 @@ usage(const char *name)
 static int
 print_command_instruction(){
     printe("Please enter one of the following commands:\n");
-    printe("\n[1] download <filename> - to download a file"
-        "\n[2] upload <path/to/filename> - to upload a file"
-        "\n[3] status <filename> - to see the status of an uploaded file"
-        "\n[4] help - to learn more about the program"
-        "\n[5] exit - to exit the program \n\n");
+    printe("\n[1] download <filename> -- to download a file"
+        "\n[2] upload <path/to/filename> -- to upload a file"
+        "\n[3] status <filename> -- to see the status of an uploaded file"
+        "\n[4] help -- to learn more about the program"
+        "\n[5] exit -- to exit the program \n\n");
     return 1;
 }
 
@@ -93,7 +93,16 @@ main(int argc, char **argv)
         if (starts_with(cmd, "download ")) {
             char *fname = cmd + strlen("download ");
             fname = trim_string(fname);
-            client_start("127.0.0.1", 8888, 8889, fname);
+            char *address;
+            printe("What is the address? ");
+            if ((read = getline(&address, &len, stdin)) < 0) {
+                break;
+            }
+            printe("What is the port? ");
+            if ((read = getline(&line, &len, stdin)) < 0) {
+                break;
+            }
+            client_start(address, atoi(line), 8889, fname);
             flush();
         } else if (starts_with(cmd, "upload ")) {
             char *path = cmd + strlen("upload ");
@@ -117,7 +126,7 @@ main(int argc, char **argv)
             break;
         } else if (strcmp(cmd, "help") == 0) {
             printe("FTCP 1.0\n"
-                  "This program is created to speed up the process of transferring files. As there are more people downloading the same file, the speed will significantly increase, similarly to Torrent. Unlike Torrent, however, we do not require trackers but just regular users. This allows for greater flexibility and ease of use");
+                  "This program is created to speed up the process of transferring files. As there are more people downloading the same file, the speed will significantly increase, similarly to Torrent. Unlike Torrent, however, we do not require trackers but just regular users. This allows for greater flexibility and ease of use.\n\n");
             print_command_instruction();
         }else {
             printe("INVALID COMMAND!\n");
