@@ -119,7 +119,6 @@ main(int argc, char **argv)
             if (!get_file_by_name(fname, &f)) {
                 printf("Unknown file\n");
             } else {
-                printf("OK!\n");
                 printf("File name: %s\n", f->meta.file_name);
                 printf("File size: %ld\n", f->meta.file_size);
                 printf("Number of peers: %d\n", f->num_peers);
@@ -131,7 +130,7 @@ main(int argc, char **argv)
                     else if(f->block_status[i] == BS_DOWNLOADING) downloading++; 
                 }
                 double frac_downloaded = downloaded/(double)f->meta.block_count;
-                double frac_downloading = downloaded/(double)f->meta.block_count;
+                double frac_downloading = downloading/(double)f->meta.block_count;
                 uint32_t bar_size = 40;
                 uint32_t bar_downloaded = (uint32_t)(frac_downloaded * bar_size);
                 uint32_t bar_downloading = (uint32_t)(frac_downloading * bar_size);
@@ -164,7 +163,7 @@ main(int argc, char **argv)
                 print_green();
                 printf("\ndownloaded: %f%%\n", 100*frac_downloaded);
                 print_red();
-                printf("downloading: %f%%\n", 100*frac_downloading);
+                printf("downloading: %f%%\n\n", 100*frac_downloading);
                 print_white();
             }
         } else if (strcmp(cmd, "exit") == 0) {
