@@ -32,6 +32,17 @@ do {                           \
 
 #endif
 
+/**
+ * Prints various colors
+ */
+void print_normal();
+void print_red();
+void print_green();
+void print_yellow();
+void print_blue();
+void print_magneta();
+void print_cyan();
+void print_white();
 
 /**
  * Prints the formatted message to stderr.

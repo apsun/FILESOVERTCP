@@ -29,8 +29,8 @@ usage(const char *name)
 
 static int
 print_command_instruction(){
-    printe("Please enter one of the following commands:\n");
-    printe("\n[1] download <filename> -- to download a file"
+    printf("Please enter one of the following commands:\n");
+    printf("\n[1] download <filename> -- to download a file"
         "\n[2] upload <path/to/filename> -- to upload a file"
         "\n[3] status <filename> -- to see the status of an uploaded file"
         "\n[4] help -- to learn more about the program"
@@ -73,32 +73,34 @@ main(int argc, char **argv)
     ssize_t read;
 
     system("clear");
-    printe("/**********************\\\n");
-    printe("    Welcome to FTCP\n");
-    printe("\\**********************/\n\n");
+    print_green();
+    printf("/**********************\\\n");
+    printf("    Welcome to FTCP\n");
+    printf("\\**********************/\n\n");
+    print_white();
     print_command_instruction();
 
     while (true) {
 
         //Reads the user's option
 
-        printe("FTCP> ");
+        printf("FTCP> ");
         if ((read = getline(&line, &len, stdin)) < 0) {
             break;
         }
 
-        printe("\n");
+        printf("\n");
 
         char *cmd = trim_string(line);
         if (starts_with(cmd, "download ")) {
             char *fname = cmd + strlen("download ");
             fname = trim_string(fname);
             char *address;
-            printe("What is the address? ");
+            printf("What is the address? ");
             if ((read = getline(&address, &len, stdin)) < 0) {
                 break;
             }
-            printe("What is the port? ");
+            printf("What is the port? ");
             if ((read = getline(&line, &len, stdin)) < 0) {
                 break;
             }
@@ -115,28 +117,75 @@ main(int argc, char **argv)
             fname = trim_string(fname);
             file_state_t *f;
             if (!get_file_by_name(fname, &f)) {
-                printe("Unknown file\n");
+                printf("Unknown file\n");
             } else {
-                printe("OK!\n");
-                printe("File name: %s\n", f->meta.file_name);
-                printe("File size: %ld\n", f->meta.file_size);
-                printe("Number of peers: %d\n", f->num_peers);
+                printf("OK!\n");
+                printf("File name: %s\n", f->meta.file_name);
+                printf("File size: %ld\n", f->meta.file_size);
+                printf("Number of peers: %d\n", f->num_peers);
+
+                uint32_t downloaded = 0;
+                uint32_t downloading = 0;
+                for(uint32_t i = 0; i<f->meta.block_count; i++){
+                    if(f->block_status[i] == BS_HAVE) downloaded++; 
+                    else if(f->block_status[i] == BS_DOWNLOADING) downloading++; 
+                }
+                double frac_downloaded = downloaded/(double)f->meta.block_count;
+                double frac_downloading = downloaded/(double)f->meta.block_count;
+                uint32_t bar_size = 40;
+                uint32_t bar_downloaded = (uint32_t)(frac_downloaded * bar_size);
+                uint32_t bar_downloading = (uint32_t)(frac_downloading * bar_size);
+                printf("/");
+                for(uint32_t i = 0; i<bar_size; i++){
+                  printf("-"); 
+                }
+                printf("\\\n");
+
+                printf("|");
+                for(uint32_t i = 0; i<bar_size; i++){
+                  if(i < bar_downloaded){
+                    print_green();
+                    printf("*");
+                    print_white();
+                  }else if(i < bar_downloaded + bar_downloading){
+                    print_red();
+                    printf("*");
+                    print_white();
+                  }else printf(" ");
+                }
+                printf("|\n");
+                
+                printf("\\");
+                for(uint32_t i = 0; i<bar_size; i++){
+                  printf("-"); 
+                }
+                printf("/\n");
+
+                print_green();
+                printf("\ndownloaded: %f%%\n", 100*frac_downloaded);
+                print_red();
+                printf("downloading: %f%%\n", 100*frac_downloading);
+                print_white();
             }
         } else if (strcmp(cmd, "exit") == 0) {
             break;
         } else if (strcmp(cmd, "help") == 0) {
-            printe("FTCP 1.0\n"
+            print_green();
+            printf("FTCP 1.0\n"
                   "This program is created to speed up the process of transferring files. As there are more people downloading the same file, the speed will significantly increase, similarly to Torrent. Unlike Torrent, however, we do not require trackers but just regular users. This allows for greater flexibility and ease of use.\n\n");
+            print_white();
             print_command_instruction();
         }else {
-            printe("INVALID COMMAND!\n");
+            print_red();
+            printf("INVALID COMMAND!\n");
+            print_white();
             print_command_instruction();
         }
     }
 
     flush();
     finalize();
-    printe("Bye!\n");
+    printf("Bye!\n");
     free(line);
     if(config_file) free(config_file);
     return 0;

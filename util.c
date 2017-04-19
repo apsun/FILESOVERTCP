@@ -13,6 +13,55 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#define KNRM  "\x1B[0m"
+#define KRED  "\x1B[31m"
+#define KGRN  "\x1B[32m"
+#define KYEL  "\x1B[33m"
+#define KBLU  "\x1B[34m"
+#define KMAG  "\x1B[35m"
+#define KCYN  "\x1B[36m"
+#define KWHT  "\x1B[37m"
+
+void
+print_normal(){
+  printf("%s", KNRM);
+}
+
+void
+print_red(){
+  printf("%s", KRED);
+}
+
+void
+print_green(){
+  printf("%s", KGRN);
+}
+
+void
+print_yellow(){
+  printf("%s", KYEL);
+}
+
+void
+print_blue(){
+  printf("%s", KBLU);
+}
+
+void
+print_magneta(){
+  printf("%s", KMAG);
+}
+
+void
+print_cyan(){
+  printf("%s", KCYN);
+}
+
+void
+print_white(){
+  printf("%s", KWHT);
+}
+
 void
 printe(const char *fmt, ...)
 {
