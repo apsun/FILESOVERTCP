@@ -18,6 +18,11 @@ load_config(const char *config_path)
     download_dir = "download";
     server_port = 8888;
 
+    if (config_path == NULL) {
+        debugf("No config file, using defaults");
+        return;
+    }
+
     FILE *f = fopen(config_path, "r");
     if (f == NULL) {
         debuge("Failed to open config file");

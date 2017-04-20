@@ -95,7 +95,7 @@ main(int argc, char **argv)
         if (starts_with(cmd, "download ")) {
             char *fname = cmd + strlen("download ");
             fname = trim_string(fname);
-            char *address;
+            char *address = NULL;
             printf("What is the address? ");
             if ((read = getline(&address, &len, stdin)) < 0) {
                 break;
